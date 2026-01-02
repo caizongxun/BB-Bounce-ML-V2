@@ -31,7 +31,7 @@ class BBModelTrainer:
     
     def create_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        從 K 線數據製作特徵
+        從 K 線數據製作特录
         """
         df = df.copy()
         close_col = 'close' if 'close' in df.columns else 'Close'
@@ -93,6 +93,30 @@ class BBModelTrainer:
         
         return df
     
+    def check_overfitting(self, train_acc, test_acc):
+        """
+        検查過據合佐（Overfitting）
+        """
+        gap = train_acc - test_acc
+        
+        print(f'\n🔍 過據合佐検查：')
+        print(f'  訓練精準度: {train_acc:.4f} ({train_acc*100:.2f}%)')
+        print(f'  測試精準度: {test_acc:.4f} ({test_acc*100:.2f}%)')
+        print(f'  精準度寶: {gap:.4f} ({gap*100:.2f}%)')
+        
+        if gap < 0.01:  # 精準度寶 < 1%
+            print(f'  ✅ 模型帷貌！沒有過據合佐')
+            return 'good'
+        elif gap < 0.05:  # 精準度寶 < 5%
+            print(f'  ⚠️ 輕微過據合佐，但可以接受')
+            return 'acceptable'
+        elif gap < 0.10:  # 精準度寶 < 10%
+            print(f'  👁 中等過據合佐，b鰧詰枣殆建議授出')
+            return 'warning'
+        else:  # 精準度寶 >= 10%
+            print(f'  ❌ 嚴重過據合佐！議誮重新訓練')
+            return 'bad'
+    
     def train_single_symbol(self, symbol: str, timeframe: str, touch_range=0.02, test_size=0.2):
         """
         為單個幣種 + timeframe 訓練模型
@@ -113,8 +137,8 @@ class BBModelTrainer:
             print(f'🔧 產生標籤...')
             df = self.generator.create_training_dataset(df, lookahead=5, touch_range=touch_range)
             
-            # 3. 產生特录
-            print(f'🔧 產生特录...')
+            # 3. 產產特录
+            print(f'🔧 產產特录...')
             df = self.create_features(df)
             
             # 4. 選擇特录
@@ -141,9 +165,11 @@ class BBModelTrainer:
             print(f'📚 訓練模型...')
             scaler = StandardScaler()
             X_train_scaled = scaler.fit_transform(X_train)
+            X_test_scaled = scaler.transform(X_test)
             
             # 標籤轉換: -1 -> 0, 0 -> 1, 1 -> 2
             y_train_mapped = np.array([self.label_map[int(label)] for label in y_train])
+            y_test_mapped = np.array([self.label_map[int(label)] for label in y_test])
             
             model = XGBClassifier(
                 n_estimators=100,
@@ -159,21 +185,28 @@ class BBModelTrainer:
             
             model.fit(X_train_scaled, y_train_mapped)
             
-            # 7. 驗證
-            X_test_scaled = scaler.transform(X_test)
-            y_test_mapped = np.array([self.label_map[int(label)] for label in y_test])
-            y_pred = model.predict(X_test_scaled)
+            # 7. 統計邟訓練集精準度
+            y_train_pred = model.predict(X_train_scaled)
+            train_acc = accuracy_score(y_train_mapped, y_train_pred)
             
-            acc = accuracy_score(y_test_mapped, y_pred)
-            f1 = f1_score(y_test_mapped, y_pred, average='weighted')
+            # 8. 統計測試集精準度
+            y_test_pred = model.predict(X_test_scaled)
+            test_acc = accuracy_score(y_test_mapped, y_test_pred)
+            test_f1 = f1_score(y_test_mapped, y_test_pred, average='weighted')
             
-            print(f'  上作: {acc:.4f}')
-            print(f'  F1 分數: {f1:.4f}')
+            # 9. 検查過據合佐
+            overfitting_status = self.check_overfitting(train_acc, test_acc)
+            
+            # 10. 轉避過據合佐，只顯示測試精準度
+            print(f'\n📈 主要指標：')
+            print(f'  測試精準度: {test_acc:.4f} ({test_acc*100:.2f}%)')
+            print(f'  測試 F1 分數: {test_f1:.4f}')
+            
             print(f'\n分類報告：')
             label_names = ['下軌支撐', '中軸中立', '上軌阻力']
-            print(classification_report(y_test_mapped, y_pred, target_names=label_names))
+            print(classification_report(y_test_mapped, y_test_pred, target_names=label_names))
             
-            # 8. 保存模型
+            # 11. 保存模型
             symbol_dir = self.models_base_dir / symbol / timeframe
             symbol_dir.mkdir(parents=True, exist_ok=True)
             
@@ -190,7 +223,8 @@ class BBModelTrainer:
             print(f'  {scaler_path}')
             print(f'  {label_map_path}')
             
-            return True
+            # 如果有严重過據合佐，傳回 False 以跟蹤
+            return overfitting_status != 'bad'
         
         except Exception as e:
             print(f'❌ 訓練失敗: {e}')
@@ -205,6 +239,7 @@ class BBModelTrainer:
         print('\n🚀 開始為所有幣種訓練模型...')
         
         success_count = 0
+        warning_count = 0
         total_count = len(self.loader.symbols) * len(self.loader.timeframes)
         
         for symbol in self.loader.symbols:
