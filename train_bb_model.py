@@ -18,11 +18,12 @@ class BBModelTrainer:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
+        # 為每個幣種 + timeframe 建立目錄
+        self.models_base_dir = self.output_dir / 'bb_models'
+        self.models_base_dir.mkdir(parents=True, exist_ok=True)
+        
         self.loader = CryptoDataLoader()
         self.generator = LabelGenerator(period=20, std_dev=2)
-        
-        self.model = None
-        self.scaler = None
         
         # 標籤對應
         self.label_map = {-1: 0, 0: 1, 1: 2}  # support -> 0, neutral -> 1, resistance -> 2
@@ -92,147 +93,127 @@ class BBModelTrainer:
         
         return df
     
-    def load_and_prepare_data(self, touch_range=0.02):
+    def train_single_symbol(self, symbol: str, timeframe: str, touch_range=0.02, test_size=0.2):
         """
-        載入整理整個訓練數據集
+        為單個幣種 + timeframe 訓練模型
         """
-        print('🚀 開始下載 22 種幣種的整個訓練數據駕...')
+        print(f'\n{'='*60}')
+        print(f'🎯 訓練 {symbol} {timeframe} 模型')
+        print(f'{'='*60}')
         
-        all_dfs = []
-        
-        for symbol in self.loader.symbols:
-            try:
-                print(f'  ⬇️  {symbol}...', end=' ', flush=True)
-                
-                # 下載所有 timeframe
-                symbol_dfs = []
-                for tf in self.loader.timeframes:
-                    df = self.loader.download_symbol_data(symbol, tf)
-                    if df is not None:
-                        # 產生標籤
-                        df = self.generator.create_training_dataset(df, lookahead=5, touch_range=touch_range)
-                        df['symbol'] = symbol
-                        df['timeframe'] = tf
-                        symbol_dfs.append(df)
-                
-                if symbol_dfs:
-                    combined = pd.concat(symbol_dfs, ignore_index=True)
-                    all_dfs.append(combined)
-                    print(f'✅ {len(combined)} 根')
-                else:
-                    print(f'❌')
+        try:
+            # 1. 下載數據
+            df = self.loader.download_symbol_data(symbol, timeframe)
+            if df is None:
+                print(f'❌ {symbol} {timeframe} 下載失敗')
+                return False
             
-            except Exception as e:
-                print(f'❌ {e}')
-        
-        # 整合所有訓練數據
-        if all_dfs:
-            full_df = pd.concat(all_dfs, ignore_index=True)
-            print(f'\n✅ 整合後: {len(full_df)} 根訓練數據')
-            return full_df
-        else:
-            raise ValueError('沒有成功加載任何訓練數據')
-    
-    def train(self, X_train, y_train, X_test=None, y_test=None):
-        """
-        訓練 XGBClassifier
-        """
-        print(f'\n📚 訓練 BB 標籤分類器...')
-        
-        # 新延伸化
-        self.scaler = StandardScaler()
-        X_train_scaled = self.scaler.fit_transform(X_train)
-        
-        # 標籤轉換: -1 -> 0, 0 -> 1, 1 -> 2
-        y_train_mapped = np.array([self.label_map[int(label)] for label in y_train])
-        
-        # 訓練模式
-        self.model = XGBClassifier(
-            n_estimators=100,
-            max_depth=6,
-            learning_rate=0.1,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            random_state=42,
-            eval_metric='mlogloss',
-            verbosity=0,
-            num_class=3  # 明確指定 3 個類別
-        )
-        
-        self.model.fit(X_train_scaled, y_train_mapped)
-        
-        # 驗證
-        if X_test is not None and y_test is not None:
-            X_test_scaled = self.scaler.transform(X_test)
+            # 2. 產生標籤
+            print(f'🔧 產生標籤...')
+            df = self.generator.create_training_dataset(df, lookahead=5, touch_range=touch_range)
+            
+            # 3. 產生特徵
+            print(f'🔧 產生特徵...')
+            df = self.create_features(df)
+            
+            # 4. 選擇特徵
+            feature_cols = [
+                'price_to_bb_middle', 'dist_upper_norm', 'dist_lower_norm',
+                'bb_width', 'rsi', 'volatility', 'returns_std',
+                'high_low_ratio', 'close_open_ratio',
+                'sma_5', 'sma_20', 'sma_50'
+            ]
+            
+            # 離棄或 nan 數據
+            X = df[feature_cols].fillna(method='ffill').fillna(method='bfill')
+            y = df['bb_touch_label']
+            
+            # 5. 分割訓練/測試集
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_size, random_state=42, stratify=y
+            )
+            
+            print(f'  訓練集: {len(X_train)} 根')
+            print(f'  測試集: {len(X_test)} 根')
+            
+            # 6. 訓練模型
+            print(f'📚 訓練模型...')
+            scaler = StandardScaler()
+            X_train_scaled = scaler.fit_transform(X_train)
+            
+            # 標籤轉換: -1 -> 0, 0 -> 1, 1 -> 2
+            y_train_mapped = np.array([self.label_map[int(label)] for label in y_train])
+            
+            model = XGBClassifier(
+                n_estimators=100,
+                max_depth=6,
+                learning_rate=0.1,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                random_state=42,
+                eval_metric='mlogloss',
+                verbosity=0,
+                num_class=3
+            )
+            
+            model.fit(X_train_scaled, y_train_mapped)
+            
+            # 7. 驗證
+            X_test_scaled = scaler.transform(X_test)
             y_test_mapped = np.array([self.label_map[int(label)] for label in y_test])
-            y_pred = self.model.predict(X_test_scaled)
+            y_pred = model.predict(X_test_scaled)
             
             acc = accuracy_score(y_test_mapped, y_pred)
             f1 = f1_score(y_test_mapped, y_pred, average='weighted')
             
             print(f'  上作: {acc:.4f}')
             print(f'  F1 分數: {f1:.4f}')
-            print(f'\n呴窑顫婊硐碚烳斩柷象')
-            
-            # 標籤名稱
+            print(f'\n分類報告：')
             label_names = ['下軌支撐', '中軸中立', '上軌阻力']
             print(classification_report(y_test_mapped, y_pred, target_names=label_names))
-    
-    def save_model(self):
-        """
-        保存模式
-        """
-        model_path = self.output_dir / 'bb_model.pkl'
-        scaler_path = self.output_dir / 'bb_scaler.pkl'
-        label_map_path = self.output_dir / 'bb_label_map.pkl'
+            
+            # 8. 保存模型
+            symbol_dir = self.models_base_dir / symbol / timeframe
+            symbol_dir.mkdir(parents=True, exist_ok=True)
+            
+            model_path = symbol_dir / 'model.pkl'
+            scaler_path = symbol_dir / 'scaler.pkl'
+            label_map_path = symbol_dir / 'label_map.pkl'
+            
+            joblib.dump(model, model_path)
+            joblib.dump(scaler, scaler_path)
+            joblib.dump(self.label_map, label_map_path)
+            
+            print(f'\n📦 模型已保存:')
+            print(f'  {model_path}')
+            print(f'  {scaler_path}')
+            print(f'  {label_map_path}')
+            
+            return True
         
-        joblib.dump(self.model, model_path)
-        joblib.dump(self.scaler, scaler_path)
-        joblib.dump(self.label_map, label_map_path)
-        
-        print(f'\n📦 模式已保存:')
-        print(f'  {model_path}')
-        print(f'  {scaler_path}')
-        print(f'  {label_map_path}')
+        except Exception as e:
+            print(f'❌ 訓練失敗: {e}')
+            return False
     
     def run_full_pipeline(self, touch_range=0.02, test_size=0.2):
         """
-        執行完整訓練流程
+        為所有幣種 + timeframe 訓練模型
         """
-        # 1. 加載整理數據
-        df = self.load_and_prepare_data(touch_range=touch_range)
+        print('\n🚀 開始為所有幣種訓練模型...')
         
-        # 2. 產產特录
-        print(f'\n🔧 產產特录...')
-        df = self.create_features(df)
+        success_count = 0
+        total_count = len(self.loader.symbols) * len(self.loader.timeframes)
         
-        # 3. 擷選特徵
-        feature_cols = [
-            'price_to_bb_middle', 'dist_upper_norm', 'dist_lower_norm',
-            'bb_width', 'rsi', 'volatility', 'returns_std',
-            'high_low_ratio', 'close_open_ratio',
-            'sma_5', 'sma_20', 'sma_50'
-        ]
+        for symbol in self.loader.symbols:
+            for timeframe in self.loader.timeframes:
+                if self.train_single_symbol(symbol, timeframe, touch_range, test_size):
+                    success_count += 1
         
-        # 離鴉或 nan 數據
-        X = df[feature_cols].fillna(method='ffill').fillna(method='bfill')
-        y = df['bb_touch_label']
-        
-        # 4. 傳分訓練/測試集
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=42, stratify=y
-        )
-        
-        print(f'  訓練集: {len(X_train)} 根')
-        print(f'  測試集: {len(X_test)} 根')
-        
-        # 5. 訓練模式
-        self.train(X_train.values, y_train.values, X_test.values, y_test.values)
-        
-        # 6. 保存模式
-        self.save_model()
-        
-        print(f'\n✅ 訓練完成！')
+        print(f'\n{'='*60}')
+        print(f'✅ 訓練完成！成功: {success_count}/{total_count}')
+        print(f'{'='*60}')
+        print(f'模型保存位置: {self.models_base_dir}')
+        print(f'結構：models/bb_models/<SYMBOL>/<TIMEFRAME>/')
 
 
 if __name__ == '__main__':
