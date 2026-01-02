@@ -18,15 +18,16 @@ class VolatilityModelTrainer:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
+        # 為每個幣種 + timeframe 建立目錄
+        self.models_base_dir = self.output_dir / 'vol_models'
+        self.models_base_dir.mkdir(parents=True, exist_ok=True)
+        
         self.loader = CryptoDataLoader()
         self.generator = LabelGenerator(period=20, std_dev=2)
-        
-        self.model = None
-        self.scaler = None
     
     def create_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        產產波動性預測特彛
+        產產波動性預測特录
         """
         df = df.copy()
         close_col = 'close' if 'close' in df.columns else 'Close'
@@ -43,19 +44,19 @@ class VolatilityModelTrainer:
         # 2. 上下軌寶予 (BBW)
         df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle']
         
-        # 3. 價格車羪率輕渥
+        # 3. 價格車羪率輕渣
         df['price_range'] = (df['high'] - df['low']) / df[close_col] if 'high' in df.columns else 0
         df['body_size'] = (df[close_col] - df['open']).abs() / df[close_col] if 'open' in df.columns else 0
         
-        # 4. RSI 和 勘動性第 (Volume Volatility)
+        # 4. RSI 和 波動性贊針
         df = self.calculate_rsi(df)
         df['volume_change'] = df['volume'].pct_change().rolling(window=5).std() if 'volume' in df.columns else 0
         
-        # 5. 平均僅感譠地区間
+        # 5. 平均真寶譠地区間
         df['atr_14'] = self.calculate_atr(df, period=14)
         df['atr_ratio'] = df['atr_14'] / df[close_col]
         
-        # 6. 價格路旁的谺度
+        # 6. 價格路走的躺度
         df['returns'] = df[close_col].pct_change()
         df['returns_rolling_std'] = df['returns'].rolling(window=10).std()
         df['returns_rolling_mean'] = df['returns'].rolling(window=10).mean()
@@ -129,174 +130,148 @@ class VolatilityModelTrainer:
         
         return df
     
-    def load_and_prepare_data(self, touch_range=0.02):
+    def train_single_symbol(self, symbol: str, timeframe: str, touch_range=0.02, test_size=0.2, model_type='regression'):
         """
-        加載、整理訓練數據
+        為單個幣種 + timeframe 訓練波動性模型
+        
+        model_type: 'regression' 或 'classification'
         """
-        print('🚀 開始下載整理訓練數據...')
+        print(f'\n{"="*60}')
+        print(f'📚 訓練 {symbol} {timeframe} 波動性模型 ({model_type})')
+        print(f'{"="*60}')
         
-        all_dfs = []
-        
-        for symbol in self.loader.symbols:
-            try:
-                print(f'  ⬇️  {symbol}...', end=' ', flush=True)
+        try:
+            # 1. 下載數據
+            df = self.loader.download_symbol_data(symbol, timeframe)
+            if df is None:
+                print(f'❌ {symbol} {timeframe} 下載失敗')
+                return False
+            
+            # 2. 產生標籤
+            print(f'🔧 產生標籤...')
+            df = self.generator.create_training_dataset(df, lookahead=5, touch_range=touch_range)
+            
+            # 3. 產產特录
+            print(f'🔧 產產特录...')
+            df = self.create_features(df)
+            
+            # 4. 選擇特录
+            feature_cols = [
+                'volatility', 'bb_width', 'price_range', 'body_size',
+                'rsi', 'volume_change', 'atr_ratio',
+                'returns_rolling_std', 'returns_rolling_mean',
+                'hist_vol_5', 'hist_vol_10', 'hist_vol_20',
+                'price_to_sma', 'k_percent', 'd_percent'
+            ]
+            
+            X = df[feature_cols].fillna(method='ffill').fillna(method='bfill')
+            
+            if model_type == 'regression':
+                y = df['future_volatility']
+                y = y[y.notna()]
+                X = X.loc[y.index]
+            else:  # classification
+                y = df['volatility_numeric']
+            
+            # 5. 分割訓練/測試集
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_size, random_state=42
+            )
+            
+            print(f'  訓練集: {len(X_train)} 根')
+            print(f'  測試集: {len(X_test)} 根')
+            
+            # 6. 訓練模型
+            print(f'📚 訓練模型...')
+            scaler = StandardScaler()
+            X_train_scaled = scaler.fit_transform(X_train)
+            X_test_scaled = scaler.transform(X_test)
+            
+            if model_type == 'regression':
+                model = XGBRegressor(
+                    n_estimators=100,
+                    max_depth=6,
+                    learning_rate=0.1,
+                    subsample=0.8,
+                    colsample_bytree=0.8,
+                    random_state=42,
+                    verbosity=0
+                )
+                model.fit(X_train_scaled, y_train.values)
                 
-                symbol_dfs = []
-                for tf in self.loader.timeframes:
-                    df = self.loader.download_symbol_data(symbol, tf)
-                    if df is not None:
-                        # 產生標籤
-                        df = self.generator.create_training_dataset(df, lookahead=5, touch_range=touch_range)
-                        df['symbol'] = symbol
-                        df['timeframe'] = tf
-                        symbol_dfs.append(df)
+                # 驗證
+                y_pred = model.predict(X_test_scaled)
+                mse = mean_squared_error(y_test, y_pred)
+                rmse = np.sqrt(mse)
+                mae = mean_absolute_error(y_test, y_pred)
+                r2 = r2_score(y_test, y_pred)
                 
-                if symbol_dfs:
-                    combined = pd.concat(symbol_dfs, ignore_index=True)
-                    all_dfs.append(combined)
-                    print(f'✅ {len(combined)} 根')
-                else:
-                    print(f'❌')
+                print(f'  MSE: {mse:.6f}')
+                print(f'  RMSE: {rmse:.6f}')
+                print(f'  MAE: {mae:.6f}')
+                print(f'  R²: {r2:.4f}')
+            else:
+                model = XGBClassifier(
+                    n_estimators=100,
+                    max_depth=6,
+                    learning_rate=0.1,
+                    subsample=0.8,
+                    colsample_bytree=0.8,
+                    random_state=42,
+                    eval_metric='mlogloss',
+                    verbosity=0,
+                    num_class=3
+                )
+                model.fit(X_train_scaled, y_train.values)
+                
+                # 驗證
+                y_pred = model.predict(X_test_scaled)
+                acc = accuracy_score(y_test, y_pred)
+                
+                print(f'  上作: {acc:.4f}')
+                print(f'\n分類報告：')
+                label_names = ['低波', '中波', '高波']
+                print(classification_report(y_test, y_pred, target_names=label_names))
             
-            except Exception as e:
-                print(f'❌ {e}')
-        
-        if all_dfs:
-            full_df = pd.concat(all_dfs, ignore_index=True)
-            print(f'\n✅ 整合後: {len(full_df)} 根訓練數據')
-            return full_df
-        else:
-            raise ValueError('沒有成功加載任何訓練數據')
-    
-    def train_regression(self, X_train, y_train, X_test=None, y_test=None):
-        """
-        訓練回歸模式（預測未來波動性數值）
-        """
-        print(f'\n📚 訓練波動性回歸預測模型...')
-        
-        self.scaler = StandardScaler()
-        X_train_scaled = self.scaler.fit_transform(X_train)
-        
-        self.model = XGBRegressor(
-            n_estimators=100,
-            max_depth=6,
-            learning_rate=0.1,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            random_state=42,
-            verbosity=0
-        )
-        
-        self.model.fit(X_train_scaled, y_train)
-        
-        if X_test is not None and y_test is not None:
-            X_test_scaled = self.scaler.transform(X_test)
-            y_pred = self.model.predict(X_test_scaled)
+            # 7. 保存模型
+            symbol_dir = self.models_base_dir / symbol / timeframe
+            symbol_dir.mkdir(parents=True, exist_ok=True)
             
-            mse = mean_squared_error(y_test, y_pred)
-            rmse = np.sqrt(mse)
-            mae = mean_absolute_error(y_test, y_pred)
-            r2 = r2_score(y_test, y_pred)
+            model_path = symbol_dir / f'model_{model_type}.pkl'
+            scaler_path = symbol_dir / f'scaler_{model_type}.pkl'
             
-            print(f'  MSE: {mse:.6f}')
-            print(f'  RMSE: {rmse:.6f}')
-            print(f'  MAE: {mae:.6f}')
-            print(f'  R²: {r2:.4f}')
-    
-    def train_classification(self, X_train, y_train, X_test=None, y_test=None):
-        """
-        訓練分類模式（低/中/高波動性）
-        """
-        print(f'\n📚 訓練波動性分類模型...')
-        
-        self.scaler = StandardScaler()
-        X_train_scaled = self.scaler.fit_transform(X_train)
-        
-        self.model = XGBClassifier(
-            n_estimators=100,
-            max_depth=6,
-            learning_rate=0.1,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            random_state=42,
-            eval_metric='mlogloss',
-            verbosity=0
-        )
-        
-        self.model.fit(X_train_scaled, y_train)
-        
-        if X_test is not None and y_test is not None:
-            X_test_scaled = self.scaler.transform(X_test)
-            y_pred = self.model.predict(X_test_scaled)
+            joblib.dump(model, model_path)
+            joblib.dump(scaler, scaler_path)
             
-            acc = accuracy_score(y_test, y_pred)
+            print(f'\n📦 模型已保存:')
+            print(f'  {model_path}')
+            print(f'  {scaler_path}')
             
-            print(f'  上作: {acc:.4f}')
-            print(f'\n箕科頖戶號農象：')
-            print(classification_report(y_test, y_pred, target_names=['低波', '中波', '高波']))
-    
-    def save_model(self, model_suffix='regression'):
-        """
-        保存模式
-        """
-        model_path = self.output_dir / f'vol_model_{model_suffix}.pkl'
-        scaler_path = self.output_dir / f'vol_scaler_{model_suffix}.pkl'
+            return True
         
-        joblib.dump(self.model, model_path)
-        joblib.dump(self.scaler, scaler_path)
-        
-        print(f'\n💾 模式已保存:')
-        print(f'  {model_path}')
-        print(f'  {scaler_path}')
+        except Exception as e:
+            print(f'❌ 訓練失敗: {e}')
+            return False
     
     def run_full_pipeline(self, touch_range=0.02, test_size=0.2, model_type='regression'):
         """
-        執行完整訓練流程
-        
-        model_type: 'regression' (預測波動性) 或 'classification' (分類低/中/高)
+        為所有幣種 + timeframe 訓練波動性模型
         """
-        # 1. 加載整理数据
-        df = self.load_and_prepare_data(touch_range=touch_range)
+        print(f'\n🚀 開始為所有幣種訓練{model_type}波動性模型...')
         
-        # 2. 產產特彛
-        print(f'\n🔧 產產特彔...')
-        df = self.create_features(df)
+        success_count = 0
+        total_count = len(self.loader.symbols) * len(self.loader.timeframes)
         
-        # 3. 捲選特彛
-        feature_cols = [
-            'volatility', 'bb_width', 'price_range', 'body_size',
-            'rsi', 'volume_change', 'atr_ratio',
-            'returns_rolling_std', 'returns_rolling_mean',
-            'hist_vol_5', 'hist_vol_10', 'hist_vol_20',
-            'price_to_sma', 'k_percent', 'd_percent'
-        ]
+        for symbol in self.loader.symbols:
+            for timeframe in self.loader.timeframes:
+                if self.train_single_symbol(symbol, timeframe, touch_range, test_size, model_type):
+                    success_count += 1
         
-        X = df[feature_cols].fillna(method='ffill').fillna(method='bfill')
-        
-        if model_type == 'regression':
-            y = df['future_volatility']
-            y = y[y.notna()]
-            X = X.loc[y.index]
-        else:  # classification
-            y = df['volatility_numeric']
-        
-        # 4. 分隔訓練/測試集
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=42
-        )
-        
-        print(f'  訓練集: {len(X_train)} 根')
-        print(f'  測試集: {len(X_test)} 根')
-        
-        # 5. 訓練模式
-        if model_type == 'regression':
-            self.train_regression(X_train.values, y_train.values, X_test.values, y_test.values)
-            self.save_model('regression')
-        else:
-            self.train_classification(X_train.values, y_train.values, X_test.values, y_test.values)
-            self.save_model('classification')
-        
-        print(f'\n✅ 訓練完成！')
+        print(f'\n{"="*60}')
+        print(f'✅ 訓練完成！成功: {success_count}/{total_count}')
+        print(f'{"="*60}')
+        print(f'模型保存位置: {self.models_base_dir}')
+        print(f'結構：models/vol_models/<SYMBOL>/<TIMEFRAME>/')
 
 
 if __name__ == '__main__':
