@@ -146,7 +146,7 @@ class ValidityFeatures:
         """
         恢複时間
         描述: 需要多少根 K 棒恢複到軌道
-        公式: 第一次恢複的覢标 (K 数)
+        公式: 第一次恢複的覢标 (K 數)
         """
         if window is None:
             window = self.lookahead
@@ -202,7 +202,7 @@ class ValidityFeatures:
     def rsi_at_touch(self, df: pd.DataFrame) -> pd.Series:
         """
         觸碰時 RSI 值
-        描述: 放粗控宇索指旋rsi_level：控宇數字 0-100】4】5了日値。
+        描述: RSI 值：控宇索指旋轉數字 0-100。
         較低 RSI = 支撐強, 較高 RSI = 阻力強
         """
         if 'rsi' not in df.columns:
@@ -213,7 +213,7 @@ class ValidityFeatures:
     def volume_at_touch(self, df: pd.DataFrame) -> pd.Series:
         """
         觸碰時成交量
-        描述: 放粗控宇索指數，比較平均成交量
+        描述: 當前成交量比較平均成交量
         公式: 當前成交量 / 平均成交量
         """
         avg_volume = df['volume'].rolling(window=20).mean()
@@ -264,19 +264,17 @@ class ValidityFeatures:
         
         return ratio.copy().rename('bb_width_ratio')
     
-    def consecutive_touches(self, df: pd.DataFrame, touch_col: str = 'touch', window: int = 10) -> pd.Series:
+    def price_momentum_direction(self, df: pd.DataFrame, window: int = 5) -> pd.Series:
         """
-        連續觸碰數量
-        描述: 過去 N 根 K 棒中，觸碰的數量
-        較高值 = 觸碰频筁(較弱的信詞)
+        价格動量方向
+        描述: 短期价格趨勢方向
+        公式: 1 = 上升, -1 = 下跌, 0 = 横盤
         """
-        consecutive = np.zeros(len(df))
+        close_col = 'close' if 'close' in df.columns else 'Close'
+        ema = df[close_col].ewm(span=window).mean()
+        direction = np.sign(ema - ema.shift(1))
         
-        for i in range(len(df)):
-            start = max(0, i - window)
-            consecutive[i] = (df[touch_col].iloc[start:i] != 0).sum()
-        
-        return pd.Series(consecutive, index=df.index, name='consecutive_touches')
+        return pd.Series(direction, index=df.index, name='price_momentum_direction')
     
     # ============ 綜合特徵一次提取 ============
     
@@ -309,12 +307,12 @@ class ValidityFeatures:
         # 風險特徵
         df['volatility_regime'] = self.volatility_regime(df)
         df['bb_width_ratio'] = self.bb_width_ratio(df)
-        df['consecutive_touches'] = self.consecutive_touches(df)
+        df['price_momentum_direction'] = self.price_momentum_direction(df)
         
         # 此外澳幹一些优雛特徵
-        df['price_to_bb_middle'] = (df['close'] - df['bb_middle']) / df['bb_middle']
-        df['dist_lower_norm'] = (df['close'] - df['bb_lower']) / df['bb_width']
-        df['dist_upper_norm'] = (df['bb_upper'] - df['close']) / df['bb_width']
+        df['price_to_bb_middle'] = (df['close'] - df['bb_middle']) / (df['bb_middle'] + 1e-8)
+        df['dist_lower_norm'] = (df['close'] - df['bb_lower']) / (df['bb_width'] + 1e-8)
+        df['dist_upper_norm'] = (df['bb_upper'] - df['close']) / (df['bb_width'] + 1e-8)
         
         # 清理 NaN
         df = df.ffill().bfill()
@@ -344,7 +342,7 @@ class ValidityFeatures:
             # 風險特徵
             'volatility_regime',
             'bb_width_ratio',
-            'consecutive_touches',
+            'price_momentum_direction',
             
             # 优雛特徵
             'price_to_bb_middle',
