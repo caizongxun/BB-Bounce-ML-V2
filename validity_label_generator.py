@@ -11,8 +11,8 @@ class ValidityLabelGenerator:
     
     def __init__(self, 
                  lookahead=10,           # 向前看 N 根 K 棒判斷有效性
-                 min_bounce_pct=0.5,    # 最小反彈幅度 0.5%
-                 momentum_decay_thresh=0.3,  # 動量衰減閾值 30%
+                 min_bounce_pct=0.3,    # 最小反彈幅度 0.3%
+                 momentum_decay_thresh=0.15,  # 動量衰減閾值 15%
                  bb_period=20,
                  bb_std=2):
         
@@ -68,133 +68,108 @@ class ValidityLabelGenerator:
             bb_upper = df['bb_upper'].iloc[i]
             bb_lower = df['bb_lower'].iloc[i]
             bb_middle = df['bb_middle'].iloc[i]
+            bb_width = bb_upper - bb_lower
             
             # 下軌觸碰 (在下軌 ±2%)
-            if abs(price - bb_lower) / bb_lower < touch_range:
+            if abs(price - bb_lower) <= bb_width * touch_range:
                 touch[i] = -1
             # 上軌觸碰
-            elif abs(price - bb_upper) / bb_upper < touch_range:
+            elif abs(price - bb_upper) <= bb_width * touch_range:
                 touch[i] = 1
         
         return touch
     
-    def calculate_momentum_decay(self, df: pd.DataFrame, window: int = 5) -> pd.Series:
+    def calculate_momentum_decay(self, df: pd.DataFrame, window: int = 3) -> pd.Series:
         """
         計算動量衰減率
         momentum_decay = (prev_momentum - curr_momentum) / |prev_momentum|
         正值表示動量在衰減
         """
-        momentum = self.calculate_momentum(df, period=1)
-        momentum_prev = momentum.shift(1)
+        close_col = 'close' if 'close' in df.columns else 'Close'
         
-        # 避免除以零
+        # 計算價格變化
+        price_change = df[close_col].diff(1)
+        
+        # 計算衰減
         decay = np.zeros(len(df))
-        mask = momentum_prev.abs() > 1e-8
-        decay[mask] = (momentum_prev[mask] - momentum[mask]) / momentum_prev[mask].abs()
-        decay[~mask] = 0
+        for i in range(1, len(df)):
+            if abs(price_change.iloc[i-1]) > 1e-8:
+                decay[i] = (price_change.iloc[i-1] - price_change.iloc[i]) / abs(price_change.iloc[i-1])
         
         return pd.Series(decay, index=df.index)
     
-    def calculate_reversal_strength(self, df: pd.DataFrame, window: int = 3) -> pd.Series:
-        """
-        反彈強度 = 反彈方向的力度
-        計算方式：未來 N 根的最高價 - 當前價
-        """
+    def _calculate_rsi(self, df: pd.DataFrame, period=14) -> pd.DataFrame:
+        """計算 RSI"""
+        df = df.copy()
         close_col = 'close' if 'close' in df.columns else 'Close'
-        high_col = 'high' if 'high' in df.columns else 'High'
         
-        strength = np.zeros(len(df))
+        delta = df[close_col].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
         
-        for i in range(len(df) - window):
-            future_max = df[high_col].iloc[i:i+window].max()
-            current_price = df[close_col].iloc[i]
-            strength[i] = (future_max - current_price) / current_price
+        rs = gain / loss
+        df['rsi'] = 100 - (100 / (1 + rs))
+        df['rsi'] = df['rsi'].fillna(50)
         
-        return pd.Series(strength, index=df.index)
+        return df
     
     def is_valid_support(self, df: pd.DataFrame, touch_idx: int) -> bool:
         """
         判斷在 touch_idx 處的下軌觸碰是否是有效支撐
+        
+        判斷條件 (簡化版本)：
+        1. 未來 lookahead 根 K 內出現反彈
+        2. 反彈幅度 > min_bounce_pct
         """
         close_col = 'close' if 'close' in df.columns else 'Close'
+        high_col = 'high' if 'high' in df.columns else 'High'
         
         if touch_idx + self.lookahead >= len(df):
             return False  # 數據不足
         
         touch_price = df[close_col].iloc[touch_idx]
         bb_lower = df['bb_lower'].iloc[touch_idx]
-        bb_upper = df['bb_upper'].iloc[touch_idx]
-        bb_width = bb_upper - bb_lower
         
         # 檢查未來 lookahead 根 K 棒
-        future_prices = df[close_col].iloc[touch_idx:touch_idx+self.lookahead]
+        future_prices = df[high_col].iloc[touch_idx:touch_idx+self.lookahead]
         future_high = future_prices.max()
-        future_low = future_prices.min()
         
-        # 條件 1: 動量衰減檢查
-        momentum_decay = self.calculate_momentum_decay(df).iloc[touch_idx]
-        if momentum_decay < self.momentum_decay_thresh:
-            return False  # 動量未衰減，無效
+        # 條件 1: 出現反彈
+        bounce_pct = (future_high - touch_price) / touch_price * 100
         
-        # 條件 2: 反彈幅度檢查
-        bounce_pct = (future_high - touch_price) / touch_price
-        if bounce_pct < self.min_bounce_pct / 100:
-            return False  # 反彈不足
+        if bounce_pct >= self.min_bounce_pct:
+            return True
         
-        # 條件 3: 未再次觸碰下軌
-        retouch_lower = (future_low < bb_lower * (1 + 0.01))  # 再次接近下軌
-        if retouch_lower:
-            return False  # 再次跌破，支撐無效
-        
-        # 條件 4: RSI 確認 (可選)
-        if 'rsi' in df.columns:
-            rsi_at_touch = df['rsi'].iloc[touch_idx]
-            if rsi_at_touch > 40:  # 觸碰時 RSI 過高，支撐弱
-                return False
-        
-        return True  # 所有條件滿足，有效支撐
+        return False
     
     def is_valid_resistance(self, df: pd.DataFrame, touch_idx: int) -> bool:
         """
         判斷在 touch_idx 處的上軌觸碰是否是有效阻力
+        
+        判斷條件 (簡化版本)：
+        1. 未來 lookahead 根 K 內出現回檔
+        2. 回檔幅度 > min_bounce_pct
         """
         close_col = 'close' if 'close' in df.columns else 'Close'
+        low_col = 'low' if 'low' in df.columns else 'Low'
         
         if touch_idx + self.lookahead >= len(df):
             return False  # 數據不足
         
         touch_price = df[close_col].iloc[touch_idx]
         bb_upper = df['bb_upper'].iloc[touch_idx]
-        bb_lower = df['bb_lower'].iloc[touch_idx]
-        bb_width = bb_upper - bb_lower
         
         # 檢查未來 lookahead 根 K 棒
-        future_prices = df[close_col].iloc[touch_idx:touch_idx+self.lookahead]
-        future_high = future_prices.max()
+        future_prices = df[low_col].iloc[touch_idx:touch_idx+self.lookahead]
         future_low = future_prices.min()
         
-        # 條件 1: 動量衰減檢查（向上動量衰減）
-        momentum_decay = self.calculate_momentum_decay(df).iloc[touch_idx]
-        if momentum_decay < self.momentum_decay_thresh:
-            return False  # 上升動量未衰減，無效
+        # 條件 1: 出現回檔
+        pullback_pct = (touch_price - future_low) / touch_price * 100
         
-        # 條件 2: 回檔幅度檢查
-        pullback_pct = (touch_price - future_low) / touch_price
-        if pullback_pct < self.min_bounce_pct / 100:
-            return False  # 回檔不足
+        if pullback_pct >= self.min_bounce_pct:
+            return True
         
-        # 條件 3: 未再次觸碰上軌
-        retouch_upper = (future_high > bb_upper * (1 - 0.01))  # 再次接近上軌
-        if retouch_upper:
-            return False  # 再次突破，阻力無效
-        
-        # 條件 4: RSI 確認
-        if 'rsi' in df.columns:
-            rsi_at_touch = df['rsi'].iloc[touch_idx]
-            if rsi_at_touch < 60:  # 觸碰時 RSI 過低，阻力弱
-                return False
-        
-        return True  # 所有條件滿足，有效阻力
+        return False
     
     def generate_validity_labels(self, df: pd.DataFrame, touch_range: float = 0.02) -> pd.DataFrame:
         """
@@ -210,8 +185,7 @@ class ValidityLabelGenerator:
         
         # 計算必要指標
         df = self.calculate_bollinger_bands(df)
-        if 'rsi' not in df.columns:
-            df = self._calculate_rsi(df)
+        df = self._calculate_rsi(df)
         
         # 檢測觸碰
         touch = self.detect_touch(df, touch_range)
@@ -220,7 +194,7 @@ class ValidityLabelGenerator:
         # 初始化標籤列
         df['is_valid_support'] = 0
         df['is_valid_resistance'] = 0
-        df['validity_label'] = 0  # 0: 無效, 1: 有效支撐, -1: 有效阻力
+        df['validity_label'] = 0  # 0: 無效或未觸碰, 1: 有效支撐, -1: 有效阻力
         
         # 為每個觸碰點判斷有效性
         for i in range(len(df)):
@@ -233,23 +207,6 @@ class ValidityLabelGenerator:
                 if self.is_valid_resistance(df, i):
                     df.loc[i, 'is_valid_resistance'] = 1
                     df.loc[i, 'validity_label'] = -1
-        
-        return df
-    
-    def _calculate_rsi(self, df: pd.DataFrame, period=14) -> pd.DataFrame:
-        """
-        計算 RSI (Relative Strength Index)
-        """
-        df = df.copy()
-        close_col = 'close' if 'close' in df.columns else 'Close'
-        
-        delta = df[close_col].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        
-        rs = gain / loss
-        df['rsi'] = 100 - (100 / (1 + rs))
-        df['rsi'] = df['rsi'].fillna(50)
         
         return df
     
@@ -293,8 +250,8 @@ if __name__ == '__main__':
     # 生成有效性標籤
     generator = ValidityLabelGenerator(
         lookahead=10,
-        min_bounce_pct=0.5,
-        momentum_decay_thresh=0.3
+        min_bounce_pct=0.3,  # 降低到 0.3%
+        momentum_decay_thresh=0.15  # 降低到 15%
     )
     
     print('\n生成有效性標籤...')
