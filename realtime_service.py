@@ -17,16 +17,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 from label_generator import LabelGenerator
-from train_bb_model import BBModelTrainer
-from train_vol_model import VolatilityModelTrainer
 
 class RealtimePredictor:
     def __init__(self, models_dir='models'):
         self.models_dir = Path(models_dir)
         
-        # 加載丢模型和 scaler
+        # 加輈已訓練的模式和 scaler
         self.bb_model = None
         self.bb_scaler = None
+        self.bb_label_map = None
         self.vol_model = None
         self.vol_scaler = None
         
@@ -47,18 +46,26 @@ class RealtimePredictor:
     
     def load_models(self):
         """
-        加載已訓練的模式
+        加輈已訓練的模式
         """
         try:
             bb_model_path = self.models_dir / 'bb_model.pkl'
             bb_scaler_path = self.models_dir / 'bb_scaler.pkl'
+            bb_label_map_path = self.models_dir / 'bb_label_map.pkl'
             vol_model_path = self.models_dir / 'vol_model_regression.pkl'
             vol_scaler_path = self.models_dir / 'vol_scaler_regression.pkl'
             
             if bb_model_path.exists() and bb_scaler_path.exists():
                 self.bb_model = joblib.load(bb_model_path)
                 self.bb_scaler = joblib.load(bb_scaler_path)
-                logger.info('✅ 已加載 BB 標籤模式')
+                if bb_label_map_path.exists():
+                    self.bb_label_map = joblib.load(bb_label_map_path)
+                    self.inverse_bb_label_map = {v: k for k, v in self.bb_label_map.items()}
+                else:
+                    # 後佐措施
+                    self.bb_label_map = {-1: 0, 0: 1, 1: 2}
+                    self.inverse_bb_label_map = {0: -1, 1: 0, 2: 1}
+                logger.info('✅ 已加輈 BB 標籤模式')
             else:
                 logger.warning('❌ BB 標籤模式權遮難找到')
             
@@ -91,7 +98,7 @@ class RealtimePredictor:
     
     def create_features_for_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        產產預測特彛
+        產產預測特录
         """
         df = df.copy()
         
@@ -110,7 +117,7 @@ class RealtimePredictor:
         # RSI
         df = self._calculate_rsi(df)
         
-        # 其他特彛
+        # 其他特录
         df['returns'] = df[close_col].pct_change()
         df['returns_std'] = df['returns'].rolling(window=20).std()
         df['high_low_ratio'] = df['high'] / df['low'] - 1
@@ -136,7 +143,7 @@ class RealtimePredictor:
     
     def predict_bb_signal(self, df: pd.DataFrame, confidence_threshold=0.5) -> Dict:
         """
-        預測 BB 軌道支撇/阻力信号
+        預測 BB 軌道支歲/阻力信号
         """
         if self.bb_model is None or len(df) == 0:
             return None
@@ -156,7 +163,10 @@ class RealtimePredictor:
         
         # 預測統計搩率
         proba = self.bb_model.predict_proba(X_scaled)[0]
-        pred_class = self.bb_model.predict(X_scaled)[0]
+        pred_class_mapped = self.bb_model.predict(X_scaled)[0]
+        
+        # 介旧整測標籤
+        pred_class = self.inverse_bb_label_map[pred_class_mapped]
         
         # 信心度
         confidence = float(np.max(proba))
@@ -196,7 +206,7 @@ class RealtimePredictor:
             'price_to_sma', 'k_percent', 'd_percent'
         ]
         
-        # 捲選合適的特彛
+        # 擷選合適的特彛
         available_cols = [col for col in feature_cols if col in row.columns]
         X = row[available_cols].values
         
@@ -270,7 +280,7 @@ class RealtimePredictor:
 
 def create_app(predictor: RealtimePredictor):
     """
-    建立 Flask 應用程式
+        建立 Flask 應用程式
     """
     app = Flask(__name__)
     CORS(app)
