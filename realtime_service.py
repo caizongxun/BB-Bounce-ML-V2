@@ -12,8 +12,15 @@ from flask_cors import CORS
 import threading
 import time
 import logging
+import sys
 
-logging.basicConfig(level=logging.INFO)
+# 設定 UTF-8 編碼
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
+logging.basicConfig(level=logging.INFO, encoding='utf-8')
 logger = logging.getLogger(__name__)
 
 from label_generator import LabelGenerator
@@ -26,9 +33,10 @@ class RealtimePredictor:
         self.bb_models_dir = self.models_dir / 'bb_models'
         self.vol_models_dir = self.models_dir / 'vol_models'
         
-        # 模型記戆區
+        # 模型記分區
         self.bb_models_cache = {}      # {(symbol, timeframe): model}
         self.bb_scalers_cache = {}     # {(symbol, timeframe): scaler}
+        self.bb_inverse_maps = {}      # {(symbol, timeframe): inverse_map}
         self.vol_models_cache = {}     # {(symbol, timeframe): model}
         self.vol_scalers_cache = {}    # {(symbol, timeframe): scaler}
         
@@ -40,23 +48,23 @@ class RealtimePredictor:
         
         self.generator = LabelGenerator()
         
-        # 缓存最近的扫泶結果
+        # 緩存最近的掃描結果
         self.scan_cache = {}
         self.scan_cache_time = {}
         self.scan_interval = 5  # 秒
     
     def load_symbol_models(self, symbol: str, timeframe: str):
         """
-        加輈特定幣種 + timeframe 的模式
+        加載特定幣種 + timeframe 的模型
         """
         cache_key = (symbol, timeframe)
         
-        # 棄末已在記戆區中
+        # 已在記分區中
         if cache_key in self.bb_models_cache:
             return True
         
         try:
-            # BB 模式
+            # BB 模型
             bb_model_dir = self.bb_models_dir / symbol / timeframe
             bb_model_path = bb_model_dir / 'model.pkl'
             bb_scaler_path = bb_model_dir / 'scaler.pkl'
@@ -72,15 +80,13 @@ class RealtimePredictor:
                 else:
                     inverse_map = {0: -1, 1: 0, 2: 1}
                 
-                self.bb_inverse_maps = getattr(self, 'bb_inverse_maps', {})
                 self.bb_inverse_maps[cache_key] = inverse_map
-                
-                logger.info(f'✅ 已加輈 {symbol} {timeframe} BB 模式')
+                logger.info(f'已加載 {symbol} {timeframe} BB 模型')
             else:
-                logger.warning(f'❌ {symbol} {timeframe} BB 模式不存在')
+                logger.warning(f'{symbol} {timeframe} BB 模型不存在')
                 return False
             
-            # 波動性模式
+            # 波動性模型
             vol_model_dir = self.vol_models_dir / symbol / timeframe
             vol_model_path = vol_model_dir / 'model_regression.pkl'
             vol_scaler_path = vol_model_dir / 'scaler_regression.pkl'
@@ -88,19 +94,19 @@ class RealtimePredictor:
             if vol_model_path.exists() and vol_scaler_path.exists():
                 self.vol_models_cache[cache_key] = joblib.load(vol_model_path)
                 self.vol_scalers_cache[cache_key] = joblib.load(vol_scaler_path)
-                logger.info(f'✅ 已加輈 {symbol} {timeframe} 波動性模式')
+                logger.info(f'已加載 {symbol} {timeframe} 波動性模型')
             else:
-                logger.warning(f'❌ {symbol} {timeframe} 波動性模式不存在')
+                logger.warning(f'{symbol} {timeframe} 波動性模型不存在')
             
             return cache_key in self.bb_models_cache
         
         except Exception as e:
-            logger.error(f'加輈 {symbol} {timeframe} 模式失敗: {e}')
+            logger.error(f'加載 {symbol} {timeframe} 模型失敗: {e}')
             return False
     
     def fetch_klines(self, symbol: str, timeframe: str, limit: int = 120):
         """
-        從 Binance 抷取 K 線數據
+        從 Binance 擷取 K 線數據
         """
         try:
             klines = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
@@ -112,21 +118,20 @@ class RealtimePredictor:
             df = df.rename(columns={'timestamp': 'time'})
             return df
         except Exception as e:
-            logger.error(f'{symbol} {timeframe} 抷取失敗: {e}')
+            logger.error(f'{symbol} {timeframe} 擷取失敗: {e}')
             return None
     
     def create_features_for_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        產產預測特录
+        產生預測特徵
         """
         df = df.copy()
         
         # BB 軌道
         df = self.generator.calculate_bollinger_bands(df)
         df['volatility'] = self.generator.calculate_volatility(df)
-        df = self.generator.generate_bb_touch_labels(df, touch_range=0.02)
         
-        # 一膳標籤
+        # 一些標籤
         close_col = 'close'
         df['price_to_bb_middle'] = (df[close_col] - df['bb_middle']) / df['bb_middle']
         df['dist_upper_norm'] = (df['bb_upper'] - df[close_col]) / (df['bb_upper'] - df['bb_lower'])
@@ -136,7 +141,7 @@ class RealtimePredictor:
         # RSI
         df = self._calculate_rsi(df)
         
-        # 其他特录
+        # 其他特徵
         df['returns'] = df[close_col].pct_change()
         df['returns_std'] = df['returns'].rolling(window=20).std()
         df['high_low_ratio'] = df['high'] / df['low'] - 1
@@ -147,7 +152,34 @@ class RealtimePredictor:
         df['sma_20'] = df[close_col].rolling(window=20).mean()
         df['sma_50'] = df[close_col].rolling(window=50).mean()
         
-        return df.fillna(method='bfill').fillna(method='ffill')
+        # 波動性特徵
+        df['price_range'] = (df['high'] - df['low']) / df[close_col]
+        df['body_size'] = (df[close_col] - df['open']).abs() / df[close_col]
+        df['volume_change'] = df['volume'].pct_change().rolling(window=5).std()
+        
+        # ATR
+        df['atr_14'] = self._calculate_atr(df, period=14)
+        df['atr_ratio'] = df['atr_14'] / df[close_col]
+        
+        # 歷史波動性
+        df['hist_vol_5'] = df[close_col].pct_change().rolling(window=5).std()
+        df['hist_vol_10'] = df[close_col].pct_change().rolling(window=10).std()
+        df['hist_vol_20'] = df[close_col].pct_change().rolling(window=20).std()
+        
+        # 價格相對於 SMA
+        df['price_to_sma'] = df[close_col] / df['sma_20']
+        
+        # 隨機指標
+        df = self._calculate_stochastic(df)
+        
+        # 日期相關特徵
+        df['returns_rolling_std'] = df['returns'].rolling(window=10).std()
+        df['returns_rolling_mean'] = df['returns'].rolling(window=10).mean()
+        
+        # 使用 ffill 和 bfill 替代 fillna(method=...)
+        df = df.ffill().bfill()
+        
+        return df
     
     def _calculate_rsi(self, df: pd.DataFrame, period=14) -> pd.DataFrame:
         """計算 RSI"""
@@ -160,9 +192,39 @@ class RealtimePredictor:
         df['rsi'] = df['rsi'].fillna(50)
         return df
     
+    def _calculate_atr(self, df: pd.DataFrame, period=14) -> pd.Series:
+        """計算 ATR (Average True Range)"""
+        close_col = 'close'
+        high = df['high']
+        low = df['low']
+        
+        tr1 = high - low
+        tr2 = (high - df[close_col].shift()).abs()
+        tr3 = (low - df[close_col].shift()).abs()
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        atr = tr.rolling(window=period).mean()
+        
+        return atr
+    
+    def _calculate_stochastic(self, df: pd.DataFrame, period=14) -> pd.DataFrame:
+        """計算隨機指標"""
+        df = df.copy()
+        
+        high = df['high']
+        low = df['low']
+        close_col = 'close'
+        
+        min_low = low.rolling(window=period).min()
+        max_high = high.rolling(window=period).max()
+        
+        df['k_percent'] = 100 * ((df[close_col] - min_low) / (max_high - min_low))
+        df['d_percent'] = df['k_percent'].rolling(window=3).mean()
+        
+        return df
+    
     def predict_bb_signal(self, df: pd.DataFrame, symbol: str, timeframe: str) -> Dict:
         """
-        預測 BB 軌道支歴/阻力信号
+        預測 BB 軌道支撐/阻力信號
         """
         cache_key = (symbol, timeframe)
         
@@ -186,17 +248,17 @@ class RealtimePredictor:
         X = row[feature_cols].values
         X_scaled = scaler.transform(X)
         
-        # 預測統計搩率
+        # 預測統計概率
         proba = model.predict_proba(X_scaled)[0]
         pred_class_mapped = model.predict(X_scaled)[0]
         
-        # 介旧整測標籤
+        # 介紹整測標籤
         pred_class = inverse_map[pred_class_mapped]
         
         # 信心度
         confidence = float(np.max(proba))
         
-        # 信号映射: -1 = 下軌, 0 = 中間, 1 = 上軌
+        # 信號映射: -1 = 下軌, 0 = 中軸, 1 = 上軌
         signal_map = {-1: 'SUPPORT', 0: 'NEUTRAL', 1: 'RESISTANCE'}
         signal = signal_map[int(pred_class)]
         
@@ -228,6 +290,7 @@ class RealtimePredictor:
         
         row = df.iloc[-1:].copy()
         
+        # 波動性模型的完整特徵列表
         feature_cols = [
             'volatility', 'bb_width', 'price_range', 'body_size',
             'rsi', 'volume_change', 'atr_ratio',
@@ -236,11 +299,11 @@ class RealtimePredictor:
             'price_to_sma', 'k_percent', 'd_percent'
         ]
         
-        # 擷選合適的特录
-        available_cols = [col for col in feature_cols if col in row.columns]
-        X = row[available_cols].values
+        # 確保所有特徵都存在
+        X = row[feature_cols].values
         
-        if len(X) == 0:
+        if X.shape[1] != len(feature_cols):
+            logger.warning(f'特徵數量不匹配: {X.shape[1]} vs {len(feature_cols)}')
             return None
         
         X_scaled = scaler.transform(X)
@@ -253,21 +316,21 @@ class RealtimePredictor:
     
     def scan_all_symbols(self, symbols: List[str], timeframe='15m') -> List[Dict]:
         """
-        扫描所有幣種的 BB 接近狀態
+        掃描所有幣種的 BB 接近狀態
         """
         results = []
         
         for symbol in symbols:
-            # 加輈模式
+            # 加載模型
             if not self.load_symbol_models(symbol, timeframe):
                 continue
             
-            # 抷取數據
+            # 擷取數據
             df = self.fetch_klines(symbol, timeframe)
             if df is None:
                 continue
             
-            # 產產特录
+            # 產生特徵
             df = self.create_features_for_prediction(df)
             
             # 預測
@@ -279,11 +342,9 @@ class RealtimePredictor:
                     'timeframe': timeframe,
                     'timestamp': datetime.now().isoformat(),
                     'bb_signal': bb_pred,
-                    'distance_to_upper': float(df['dist_to_upper'].iloc[-1]) if 'dist_to_upper' in df.columns else None,
-                    'distance_to_lower': float(df['dist_to_lower'].iloc[-1]) if 'dist_to_lower' in df.columns else None
                 })
         
-        # 按信心度映序
+        # 按信心度排序
         results.sort(key=lambda x: x['bb_signal']['confidence'], reverse=True)
         
         return results
@@ -308,23 +369,23 @@ def create_app(predictor: RealtimePredictor):
     @app.route('/api/focus', methods=['POST'])
     def focus():
         """
-        业注授棧幣種的實時推理
+        業注授掛幣種的實時推理
         """
         try:
             data = request.json
             symbol = data.get('symbol', 'BTCUSDT')
             timeframe = data.get('timeframe', '15m')
             
-            # 加輈模式
+            # 加載模型
             if not predictor.load_symbol_models(symbol, timeframe):
-                return jsonify({'error': f'模式不存在: {symbol} {timeframe}'}), 400
+                return jsonify({'error': f'模型不存在: {symbol} {timeframe}'}), 400
             
-            # 抷取數據
+            # 擷取數據
             df = predictor.fetch_klines(symbol, timeframe)
             if df is None:
-                return jsonify({'error': '抷取數據失敗'}), 400
+                return jsonify({'error': '擷取數據失敗'}), 400
             
-            # 產產特录
+            # 產生特徵
             df = predictor.create_features_for_prediction(df)
             
             # 預測
@@ -341,12 +402,14 @@ def create_app(predictor: RealtimePredictor):
         
         except Exception as e:
             logger.error(f'Focus 路徑錯誤: {e}')
+            import traceback
+            traceback.print_exc()
             return jsonify({'error': str(e)}), 500
     
     @app.route('/api/scan', methods=['GET'])
     def scan():
         """
-        扫描所有幣種
+        掃描所有幣種
         """
         try:
             timeframe = request.args.get('timeframe', '15m')
@@ -354,7 +417,7 @@ def create_app(predictor: RealtimePredictor):
             
             results = predictor.scan_all_symbols(all_symbols, timeframe)
             
-            # 過濾储斈鏨隱扷幓接近的
+            # 過濾鄰近接近上/下軌的
             nearby = [r for r in results if r['bb_signal']['confidence'] > 0.5]
             
             return jsonify({
@@ -371,7 +434,7 @@ def create_app(predictor: RealtimePredictor):
     @app.route('/api/health', methods=['GET'])
     def health():
         """
-        模式櫪功騎檢查
+        模型狀功能檢查
         """
         return jsonify({
             'status': 'ok',
@@ -386,5 +449,5 @@ if __name__ == '__main__':
     predictor = RealtimePredictor()
     app = create_app(predictor)
     
-    logger.info('🚀 實時推理服務正在啟動...')
+    logger.info('啟動實時推理服務...')
     app.run(host='127.0.0.1', port=5000, debug=False, threaded=True)
