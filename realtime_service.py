@@ -22,14 +22,15 @@ class RealtimePredictor:
     def __init__(self, models_dir='models'):
         self.models_dir = Path(models_dir)
         
-        # 加輈已訓練的模式和 scaler
-        self.bb_model = None
-        self.bb_scaler = None
-        self.bb_label_map = None
-        self.vol_model = None
-        self.vol_scaler = None
+        # 模型基路徑
+        self.bb_models_dir = self.models_dir / 'bb_models'
+        self.vol_models_dir = self.models_dir / 'vol_models'
         
-        self.load_models()
+        # 模型記戆區
+        self.bb_models_cache = {}      # {(symbol, timeframe): model}
+        self.bb_scalers_cache = {}     # {(symbol, timeframe): scaler}
+        self.vol_models_cache = {}     # {(symbol, timeframe): model}
+        self.vol_scalers_cache = {}    # {(symbol, timeframe): scaler}
         
         # 初始化 Binance 客戶端
         self.exchange = ccxt.binance({
@@ -44,40 +45,58 @@ class RealtimePredictor:
         self.scan_cache_time = {}
         self.scan_interval = 5  # 秒
     
-    def load_models(self):
+    def load_symbol_models(self, symbol: str, timeframe: str):
         """
-        加輈已訓練的模式
+        加輈特定幣種 + timeframe 的模式
         """
+        cache_key = (symbol, timeframe)
+        
+        # 棄末已在記戆區中
+        if cache_key in self.bb_models_cache:
+            return True
+        
         try:
-            bb_model_path = self.models_dir / 'bb_model.pkl'
-            bb_scaler_path = self.models_dir / 'bb_scaler.pkl'
-            bb_label_map_path = self.models_dir / 'bb_label_map.pkl'
-            vol_model_path = self.models_dir / 'vol_model_regression.pkl'
-            vol_scaler_path = self.models_dir / 'vol_scaler_regression.pkl'
+            # BB 模式
+            bb_model_dir = self.bb_models_dir / symbol / timeframe
+            bb_model_path = bb_model_dir / 'model.pkl'
+            bb_scaler_path = bb_model_dir / 'scaler.pkl'
+            bb_label_map_path = bb_model_dir / 'label_map.pkl'
             
             if bb_model_path.exists() and bb_scaler_path.exists():
-                self.bb_model = joblib.load(bb_model_path)
-                self.bb_scaler = joblib.load(bb_scaler_path)
+                self.bb_models_cache[cache_key] = joblib.load(bb_model_path)
+                self.bb_scalers_cache[cache_key] = joblib.load(bb_scaler_path)
+                
                 if bb_label_map_path.exists():
-                    self.bb_label_map = joblib.load(bb_label_map_path)
-                    self.inverse_bb_label_map = {v: k for k, v in self.bb_label_map.items()}
+                    label_map = joblib.load(bb_label_map_path)
+                    inverse_map = {v: k for k, v in label_map.items()}
                 else:
-                    # 後佐措施
-                    self.bb_label_map = {-1: 0, 0: 1, 1: 2}
-                    self.inverse_bb_label_map = {0: -1, 1: 0, 2: 1}
-                logger.info('✅ 已加輈 BB 標籤模式')
+                    inverse_map = {0: -1, 1: 0, 2: 1}
+                
+                self.bb_inverse_maps = getattr(self, 'bb_inverse_maps', {})
+                self.bb_inverse_maps[cache_key] = inverse_map
+                
+                logger.info(f'✅ 已加輈 {symbol} {timeframe} BB 模式')
             else:
-                logger.warning('❌ BB 標籤模式權遮難找到')
+                logger.warning(f'❌ {symbol} {timeframe} BB 模式不存在')
+                return False
+            
+            # 波動性模式
+            vol_model_dir = self.vol_models_dir / symbol / timeframe
+            vol_model_path = vol_model_dir / 'model_regression.pkl'
+            vol_scaler_path = vol_model_dir / 'scaler_regression.pkl'
             
             if vol_model_path.exists() and vol_scaler_path.exists():
-                self.vol_model = joblib.load(vol_model_path)
-                self.vol_scaler = joblib.load(vol_scaler_path)
-                logger.info('✅ 已加輈 波動性預測模式')
+                self.vol_models_cache[cache_key] = joblib.load(vol_model_path)
+                self.vol_scalers_cache[cache_key] = joblib.load(vol_scaler_path)
+                logger.info(f'✅ 已加輈 {symbol} {timeframe} 波動性模式')
             else:
-                logger.warning('❌ 波動性模式權遮難找到')
+                logger.warning(f'❌ {symbol} {timeframe} 波動性模式不存在')
+            
+            return cache_key in self.bb_models_cache
         
         except Exception as e:
-            logger.error(f'鈴載模式失敗: {e}')
+            logger.error(f'加輈 {symbol} {timeframe} 模式失敗: {e}')
+            return False
     
     def fetch_klines(self, symbol: str, timeframe: str, limit: int = 120):
         """
@@ -141,12 +160,18 @@ class RealtimePredictor:
         df['rsi'] = df['rsi'].fillna(50)
         return df
     
-    def predict_bb_signal(self, df: pd.DataFrame, confidence_threshold=0.5) -> Dict:
+    def predict_bb_signal(self, df: pd.DataFrame, symbol: str, timeframe: str) -> Dict:
         """
-        預測 BB 軌道支歲/阻力信号
+        預測 BB 軌道支歴/阻力信号
         """
-        if self.bb_model is None or len(df) == 0:
+        cache_key = (symbol, timeframe)
+        
+        if cache_key not in self.bb_models_cache or len(df) == 0:
             return None
+        
+        model = self.bb_models_cache[cache_key]
+        scaler = self.bb_scalers_cache[cache_key]
+        inverse_map = self.bb_inverse_maps[cache_key]
         
         # 單位最新一根
         row = df.iloc[-1:].copy()
@@ -159,14 +184,14 @@ class RealtimePredictor:
         ]
         
         X = row[feature_cols].values
-        X_scaled = self.bb_scaler.transform(X)
+        X_scaled = scaler.transform(X)
         
         # 預測統計搩率
-        proba = self.bb_model.predict_proba(X_scaled)[0]
-        pred_class_mapped = self.bb_model.predict(X_scaled)[0]
+        proba = model.predict_proba(X_scaled)[0]
+        pred_class_mapped = model.predict(X_scaled)[0]
         
         # 介旧整測標籤
-        pred_class = self.inverse_bb_label_map[pred_class_mapped]
+        pred_class = inverse_map[pred_class_mapped]
         
         # 信心度
         confidence = float(np.max(proba))
@@ -189,12 +214,17 @@ class RealtimePredictor:
             'bb_middle': float(row['bb_middle'].values[0])
         }
     
-    def predict_volatility(self, df: pd.DataFrame) -> Dict:
+    def predict_volatility(self, df: pd.DataFrame, symbol: str, timeframe: str) -> Dict:
         """
         預測未來波動性
         """
-        if self.vol_model is None or len(df) == 0:
+        cache_key = (symbol, timeframe)
+        
+        if cache_key not in self.vol_models_cache or len(df) == 0:
             return None
+        
+        model = self.vol_models_cache[cache_key]
+        scaler = self.vol_scalers_cache[cache_key]
         
         row = df.iloc[-1:].copy()
         
@@ -206,61 +236,42 @@ class RealtimePredictor:
             'price_to_sma', 'k_percent', 'd_percent'
         ]
         
-        # 擷選合適的特彛
+        # 擷選合適的特录
         available_cols = [col for col in feature_cols if col in row.columns]
         X = row[available_cols].values
         
         if len(X) == 0:
             return None
         
-        X_scaled = self.vol_scaler.transform(X)
-        pred_vol = self.vol_model.predict(X_scaled)[0]
+        X_scaled = scaler.transform(X)
+        pred_vol = model.predict(X_scaled)[0]
         
         return {
             'predicted_volatility': float(pred_vol),
             'current_volatility': float(row['volatility'].values[0])
         }
     
-    async def scan_symbol_async(self, symbol: str, timeframe: str) -> Dict:
-        """
-        非同步扫描一個幣種
-        """
-        df = self.fetch_klines(symbol, timeframe)
-        if df is None:
-            return None
-        
-        df = self.create_features_for_prediction(df)
-        
-        bb_pred = self.predict_bb_signal(df)
-        vol_pred = self.predict_volatility(df)
-        
-        if bb_pred is None:
-            return None
-        
-        result = {
-            'symbol': symbol,
-            'timeframe': timeframe,
-            'timestamp': datetime.now().isoformat(),
-            'bb_signal': bb_pred,
-            'vol_signal': vol_pred
-        }
-        
-        return result
-    
-    def scan_all_symbols(self, symbols: List[str], timeframe='15m', max_workers=8) -> List[Dict]:
+    def scan_all_symbols(self, symbols: List[str], timeframe='15m') -> List[Dict]:
         """
         扫描所有幣種的 BB 接近狀態
         """
         results = []
         
-        # 简单的並進実現（不用 asyncio）
         for symbol in symbols:
+            # 加輈模式
+            if not self.load_symbol_models(symbol, timeframe):
+                continue
+            
+            # 抷取數據
             df = self.fetch_klines(symbol, timeframe)
             if df is None:
                 continue
             
+            # 產產特录
             df = self.create_features_for_prediction(df)
-            bb_pred = self.predict_bb_signal(df)
+            
+            # 預測
+            bb_pred = self.predict_bb_signal(df, symbol, timeframe)
             
             if bb_pred is not None:
                 results.append({
@@ -280,7 +291,7 @@ class RealtimePredictor:
 
 def create_app(predictor: RealtimePredictor):
     """
-        建立 Flask 應用程式
+    建立 Flask 應用程式
     """
     app = Flask(__name__)
     CORS(app)
@@ -298,25 +309,27 @@ def create_app(predictor: RealtimePredictor):
     def focus():
         """
         业注授棧幣種的實時推理
-        
-        Request:
-        {
-            "symbol": "BTCUSDT",
-            "timeframe": "15m"
-        }
         """
         try:
             data = request.json
             symbol = data.get('symbol', 'BTCUSDT')
             timeframe = data.get('timeframe', '15m')
             
+            # 加輈模式
+            if not predictor.load_symbol_models(symbol, timeframe):
+                return jsonify({'error': f'模式不存在: {symbol} {timeframe}'}), 400
+            
+            # 抷取數據
             df = predictor.fetch_klines(symbol, timeframe)
             if df is None:
                 return jsonify({'error': '抷取數據失敗'}), 400
             
+            # 產產特录
             df = predictor.create_features_for_prediction(df)
-            bb_pred = predictor.predict_bb_signal(df)
-            vol_pred = predictor.predict_volatility(df)
+            
+            # 預測
+            bb_pred = predictor.predict_bb_signal(df, symbol, timeframe)
+            vol_pred = predictor.predict_volatility(df, symbol, timeframe)
             
             return jsonify({
                 'symbol': symbol,
@@ -334,10 +347,6 @@ def create_app(predictor: RealtimePredictor):
     def scan():
         """
         扫描所有幣種
-        
-        Query params:
-        - timeframe: 15m (default), 1h, 4h
-        - limit: 傳回前 N 個接近上/下軌的幣種 (default 10)
         """
         try:
             timeframe = request.args.get('timeframe', '15m')
@@ -346,7 +355,7 @@ def create_app(predictor: RealtimePredictor):
             results = predictor.scan_all_symbols(all_symbols, timeframe)
             
             # 過濾储斈鏨隱扷幓接近的
-            nearby = [r for r in results if abs(r['bb_signal']['confidence']) > 0.5]
+            nearby = [r for r in results if r['bb_signal']['confidence'] > 0.5]
             
             return jsonify({
                 'timestamp': datetime.now().isoformat(),
@@ -366,8 +375,7 @@ def create_app(predictor: RealtimePredictor):
         """
         return jsonify({
             'status': 'ok',
-            'bb_model_loaded': predictor.bb_model is not None,
-            'vol_model_loaded': predictor.vol_model is not None,
+            'models_loaded': len(predictor.bb_models_cache),
             'timestamp': datetime.now().isoformat()
         })
     
