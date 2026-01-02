@@ -52,6 +52,43 @@ class RealtimePredictor:
         self.scan_cache = {}
         self.scan_cache_time = {}
         self.scan_interval = 5  # 秒
+        
+        # 掃描所有可用的幣種
+        self._available_symbols = self._scan_available_symbols()
+    
+    def _scan_available_symbols(self) -> List[str]:
+        """
+        掃描 models/bb_models 目錄來找出所有訓練過的幣種
+        """
+        symbols = []
+        
+        if self.bb_models_dir.exists():
+            for symbol_dir in self.bb_models_dir.iterdir():
+                if symbol_dir.is_dir():
+                    symbols.append(symbol_dir.name)
+        
+        logger.info(f'發現 {len(symbols)} 個已訓練的幣種: {sorted(symbols)}')
+        return sorted(symbols)
+    
+    def get_available_symbols(self) -> List[str]:
+        """
+        返回所有可用的幣種
+        """
+        return self._available_symbols
+    
+    def get_available_timeframes(self, symbol: str) -> List[str]:
+        """
+        返回特定幣種的可用時間框架
+        """
+        timeframes = []
+        symbol_dir = self.bb_models_dir / symbol
+        
+        if symbol_dir.exists():
+            for tf_dir in symbol_dir.iterdir():
+                if tf_dir.is_dir():
+                    timeframes.append(tf_dir.name)
+        
+        return sorted(timeframes)
     
     def load_symbol_models(self, symbol: str, timeframe: str):
         """
@@ -357,14 +394,37 @@ def create_app(predictor: RealtimePredictor):
     app = Flask(__name__)
     CORS(app)
     
-    # 所有幣種
-    all_symbols = [
-        'AAVEUSDT', 'ADAUSDT', 'ALGOUSDT', 'ARBUSDT', 'ATOMUSDT',
-        'AVAXUSDT', 'BCHUSDT', 'BNBUSDT', 'BTCUSDT', 'DOGEUSDT',
-        'DOTUSDT', 'ETCUSDT', 'ETHUSDT', 'FILUSDT', 'LINKUSDT',
-        'LTCUSDT', 'MATICUSDT', 'NEARUSDT', 'OPUSDT', 'SOLUSDT',
-        'UNIUSDT', 'XRPUSDT'
-    ]
+    @app.route('/api/symbols', methods=['GET'])
+    def get_symbols():
+        """
+        返回所有可用的幣種
+        """
+        try:
+            symbols = predictor.get_available_symbols()
+            return jsonify({
+                'symbols': symbols,
+                'count': len(symbols),
+                'timestamp': datetime.now().isoformat()
+            })
+        except Exception as e:
+            logger.error(f'Get symbols 錯誤: {e}')
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/timeframes/<symbol>', methods=['GET'])
+    def get_timeframes(symbol):
+        """
+        返回特定幣種的可用時間框架
+        """
+        try:
+            timeframes = predictor.get_available_timeframes(symbol)
+            return jsonify({
+                'symbol': symbol,
+                'timeframes': timeframes,
+                'timestamp': datetime.now().isoformat()
+            })
+        except Exception as e:
+            logger.error(f'Get timeframes 錯誤: {e}')
+            return jsonify({'error': str(e)}), 500
     
     @app.route('/api/focus', methods=['POST'])
     def focus():
@@ -415,7 +475,8 @@ def create_app(predictor: RealtimePredictor):
             timeframe = request.args.get('timeframe', '15m')
             limit = int(request.args.get('limit', 10))
             
-            results = predictor.scan_all_symbols(all_symbols, timeframe)
+            symbols = predictor.get_available_symbols()
+            results = predictor.scan_all_symbols(symbols, timeframe)
             
             # 過濾鄰近接近上/下軌的
             nearby = [r for r in results if r['bb_signal']['confidence'] > 0.5]
@@ -439,6 +500,7 @@ def create_app(predictor: RealtimePredictor):
         return jsonify({
             'status': 'ok',
             'models_loaded': len(predictor.bb_models_cache),
+            'available_symbols': len(predictor.get_available_symbols()),
             'timestamp': datetime.now().isoformat()
         })
     
