@@ -23,10 +23,14 @@ class BBModelTrainer:
         
         self.model = None
         self.scaler = None
+        
+        # 標籤對應
+        self.label_map = {-1: 0, 0: 1, 1: 2}  # support -> 0, neutral -> 1, resistance -> 2
+        self.inverse_label_map = {0: -1, 1: 0, 2: 1}
     
     def create_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        從 K 線數據製作特录
+        從 K 線數據製作特徵
         """
         df = df.copy()
         close_col = 'close' if 'close' in df.columns else 'Close'
@@ -50,14 +54,14 @@ class BBModelTrainer:
         # 4. RSI
         df = self.calculate_rsi(df)
         
-        # 5. 勘動性
+        # 5. 波動性
         df['volatility'] = df['volatility'].fillna(df['volatility'].mean())
         
-        # 6. 價格動埸（日幾何幣率）
+        # 6. 價格動量（日幾何幣率）
         df['returns'] = df[close_col].pct_change()
         df['returns_std'] = df['returns'].rolling(window=20).std()
         
-        # 7. 價格跑勢
+        # 7. 價格走勢
         df['high_low_ratio'] = df['high'] / df['low'] - 1 if 'high' in df.columns else 0
         df['close_open_ratio'] = df[close_col] / df['open'] - 1 if 'open' in df.columns else 0
         
@@ -66,7 +70,7 @@ class BBModelTrainer:
         df['sma_20'] = df[close_col].rolling(window=20).mean()
         df['sma_50'] = df[close_col].rolling(window=50).mean()
         
-        # 樣子據沙正証化
+        # 樣本數據正證化
         df = df.fillna(method='bfill').fillna(method='ffill')
         
         return df
@@ -139,6 +143,9 @@ class BBModelTrainer:
         self.scaler = StandardScaler()
         X_train_scaled = self.scaler.fit_transform(X_train)
         
+        # 標籤轉換: -1 -> 0, 0 -> 1, 1 -> 2
+        y_train_mapped = np.array([self.label_map[int(label)] for label in y_train])
+        
         # 訓練模式
         self.model = XGBClassifier(
             n_estimators=100,
@@ -148,23 +155,28 @@ class BBModelTrainer:
             colsample_bytree=0.8,
             random_state=42,
             eval_metric='mlogloss',
-            verbosity=0
+            verbosity=0,
+            num_class=3  # 明確指定 3 個類別
         )
         
-        self.model.fit(X_train_scaled, y_train)
+        self.model.fit(X_train_scaled, y_train_mapped)
         
         # 驗證
         if X_test is not None and y_test is not None:
             X_test_scaled = self.scaler.transform(X_test)
+            y_test_mapped = np.array([self.label_map[int(label)] for label in y_test])
             y_pred = self.model.predict(X_test_scaled)
             
-            acc = accuracy_score(y_test, y_pred)
-            f1 = f1_score(y_test, y_pred, average='weighted')
+            acc = accuracy_score(y_test_mapped, y_pred)
+            f1 = f1_score(y_test_mapped, y_pred, average='weighted')
             
             print(f'  上作: {acc:.4f}')
             print(f'  F1 分數: {f1:.4f}')
-            print(f'\n箕科頖戶號農象：')
-            print(classification_report(y_test, y_pred, target_names=['下軌', '中間', '上軌']))
+            print(f'\n呴窑顫婊硐碚烳斩柷象')
+            
+            # 標籤名稱
+            label_names = ['下軌支撐', '中軸中立', '上軌阻力']
+            print(classification_report(y_test_mapped, y_pred, target_names=label_names))
     
     def save_model(self):
         """
@@ -172,13 +184,16 @@ class BBModelTrainer:
         """
         model_path = self.output_dir / 'bb_model.pkl'
         scaler_path = self.output_dir / 'bb_scaler.pkl'
+        label_map_path = self.output_dir / 'bb_label_map.pkl'
         
         joblib.dump(self.model, model_path)
         joblib.dump(self.scaler, scaler_path)
+        joblib.dump(self.label_map, label_map_path)
         
-        print(f'\n💾 模式已保存:')
+        print(f'\n📦 模式已保存:')
         print(f'  {model_path}')
         print(f'  {scaler_path}')
+        print(f'  {label_map_path}')
     
     def run_full_pipeline(self, touch_range=0.02, test_size=0.2):
         """
@@ -187,11 +202,11 @@ class BBModelTrainer:
         # 1. 加載整理數據
         df = self.load_and_prepare_data(touch_range=touch_range)
         
-        # 2. 產產特彛
+        # 2. 產產特录
         print(f'\n🔧 產產特录...')
         df = self.create_features(df)
         
-        # 3. 捲選特彛
+        # 3. 擷選特徵
         feature_cols = [
             'price_to_bb_middle', 'dist_upper_norm', 'dist_lower_norm',
             'bb_width', 'rsi', 'volatility', 'returns_std',
@@ -199,7 +214,7 @@ class BBModelTrainer:
             'sma_5', 'sma_20', 'sma_50'
         ]
         
-        # 离鸓或 nan 數據
+        # 離鴉或 nan 數據
         X = df[feature_cols].fillna(method='ffill').fillna(method='bfill')
         y = df['bb_touch_label']
         
