@@ -2,6 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BB Bounce ML v2 - Advanced Real-time Prediction</title>
     <style>
@@ -26,7 +27,7 @@
             gap: 0;
         }
         
-        /* 子沐板 */
+        /* 側邊欄 */
         .sidebar {
             width: 320px;
             background: rgba(15, 20, 40, 0.9);
@@ -103,7 +104,7 @@
             transform: translateY(0);
         }
         
-        /* 主軸 */
+        /* 主要內容 */
         .main-content {
             flex: 1;
             display: flex;
@@ -184,7 +185,7 @@
             display: block;
         }
         
-        /* 事焆干订 */
+        /* 焦點面板 */
         .focus-panel {
             background: rgba(25, 35, 60, 0.8);
             border: 2px solid #00d9ff;
@@ -248,7 +249,7 @@
             margin-top: 8px;
         }
         
-        /* 平呉箱位 */
+        /* 網格卡片 */
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -291,7 +292,7 @@
             background: rgba(255, 0, 0, 0.05);
         }
         
-        /* 掃描贊一觽 */
+        /* 掃描列表 */
         .scan-list {
             display: grid;
             gap: 10px;
@@ -354,12 +355,12 @@
 </head>
 <body>
     <div class="container">
-        <!-- 子沐板 -->
+        <!-- 側邊欄 -->
         <div class="sidebar">
-            <div class="sidebar-title">訪突沙參新訪毅</div>
+            <div class="sidebar-title">焦點監控</div>
             
             <div class="control-group">
-                <label class="control-label">選拇幣種</label>
+                <label class="control-label">選擇幣種</label>
                 <select id="focusSymbol" onchange="updateFocus()">
                     <option value="BTCUSDT">BTC</option>
                     <option value="ETHUSDT">ETH</option>
@@ -379,7 +380,7 @@
                 </select>
             </div>
             
-            <div class="sidebar-title">BB 參新</div>
+            <div class="sidebar-title">BB 參數</div>
             
             <div class="control-group">
                 <label class="control-label">BB 週期</label>
@@ -387,12 +388,12 @@
             </div>
             
             <div class="control-group">
-                <label class="control-label">標準侯差</label>
+                <label class="control-label">標準偏差</label>
                 <input type="number" id="bbStddev" value="2" min="1" max="5" step="0.1">
             </div>
             
             <div class="control-group">
-                <label class="control-label">適距離閾值 (百分比)</label>
+                <label class="control-label">接觸距離閾值 (百分比)</label>
                 <input type="range" id="touchRange" min="0.01" max="0.05" step="0.01" value="0.02">
                 <span id="touchRangeValue">2%</span>
             </div>
@@ -410,34 +411,34 @@
                 <input type="number" id="scanInterval" value="5" min="1" max="30">
             </div>
             
-            <button onclick="updateFocus()">🔄 更新謱突</button>
-            <button onclick="startScanning()">📡 開始扫描</button>
-            <button onclick="stopScanning()">⏸ 停止扫描</button>
+            <button onclick="updateFocus()">🔄 更新預測</button>
+            <button onclick="startScanning()">📡 開始掃描</button>
+            <button onclick="stopScanning()">⏸ 停止掃描</button>
         </div>
         
-        <!-- 主設斷 -->
+        <!-- 主要內容 -->
         <div class="main-content">
             <div class="header">
                 <h1>BB Bounce ML v2 - Advanced Prediction System</h1>
                 <div class="status-bar">
                     <div class="status-dot"></div>
-                    <span id="statusText">此剀</span>
+                    <span id="statusText">就緒</span>
                     <span id="lastUpdateTime">--:--:--</span>
                 </div>
             </div>
             
             <div class="tabs">
-                <button class="tab active" onclick="switchTab('focus')">🎯 訪突</button>
-                <button class="tab" onclick="switchTab('scan')">📡 掃描紀譢</button>
+                <button class="tab active" onclick="switchTab('focus')">🎯 焦點</button>
+                <button class="tab" onclick="switchTab('scan')">📡 掃描紀錄</button>
             </div>
             
             <div class="content-area">
-                <!-- 訪突預測 -->
+                <!-- 焦點預測 -->
                 <div class="tab-pane active" id="focus">
                     <div id="focusContent"></div>
                 </div>
                 
-                <!-- 掃描紀譢 -->
+                <!-- 掃描紀錄 -->
                 <div class="tab-pane" id="scan">
                     <div id="scanContent"></div>
                 </div>
@@ -452,7 +453,7 @@
         let scanUpdateInterval = null;
         let isScanning = false;
         
-        // UI 事件接聽
+        // UI 事件監聽
         document.getElementById('touchRange').addEventListener('input', (e) => {
             document.getElementById('touchRangeValue').textContent = (parseFloat(e.target.value) * 100).toFixed(1) + '%';
         });
@@ -488,7 +489,7 @@
                 renderFocusData(data);
                 updateTime();
             } catch (e) {
-                container.innerHTML = `<p style="color: #ff0000;">加輈失敗: ${e.message}</p>`;
+                container.innerHTML = `<p style="color: #ff0000;">加載失敗: ${e.message}</p>`;
             }
         }
         
@@ -498,7 +499,7 @@
             
             const signalType = signal.signal.toLowerCase();
             const signalClass = signalType === 'support' ? 'signal-buy' : (signalType === 'resistance' ? 'signal-sell' : 'signal-neutral');
-            const signalText = signalType === 'support' ? '🟢 支摂' : (signalType === 'resistance' ? '🔴 阻力' : '🟡 中残');
+            const signalText = signalType === 'support' ? '🟢 支撐' : (signalType === 'resistance' ? '🔴 阻力' : '🟡 中立');
             
             const html = `
                 <div class="focus-panel">
@@ -531,12 +532,12 @@
                             <div class="card-value">$${signal.bb_lower.toFixed(2)}</div>
                         </div>
                         <div class="card">
-                            <div class="card-title">置佋波動性</div>
-                            <div class="card-value">${vol.predicted_volatility.toFixed(4)}</div>
+                            <div class="card-title">預測波動性</div>
+                            <div class="card-value">${vol ? vol.predicted_volatility.toFixed(4) : 'N/A'}</div>
                         </div>
                         <div class="card">
                             <div class="card-title">當前波動</div>
-                            <div class="card-value">${vol.current_volatility.toFixed(4)}</div>
+                            <div class="card-value">${vol ? vol.current_volatility.toFixed(4) : 'N/A'}</div>
                         </div>
                     </div>
                 </div>
@@ -551,12 +552,12 @@
                 const minConfidence = parseFloat(document.getElementById('minConfidence').value);
                 
                 const response = await fetch(`${API_BASE}/scan?timeframe=${timeframe}`);
-                if (!response.ok) throw new Error('Scan 穟敗');
+                if (!response.ok) throw new Error('掃描失敗');
                 
                 const data = await response.json();
                 renderScanData(data.nearby_symbols, minConfidence);
             } catch (e) {
-                document.getElementById('scanContent').innerHTML = `<p style="color: #ff0000;">掃描失敧: ${e.message}</p>`;
+                document.getElementById('scanContent').innerHTML = `<p style="color: #ff0000;">掃描失敗: ${e.message}</p>`;
             }
         }
         
@@ -605,13 +606,13 @@
             const interval = parseInt(document.getElementById('scanInterval').value) * 1000;
             scanUpdateInterval = setInterval(scanAllSymbols, interval);
             
-            document.getElementById('statusText').textContent = '📡 正在扫描';
+            document.getElementById('statusText').textContent = '📡 正在掃描';
         }
         
         function stopScanning() {
             if (scanUpdateInterval) clearInterval(scanUpdateInterval);
             isScanning = false;
-            document.getElementById('statusText').textContent = '待橛';
+            document.getElementById('statusText').textContent = '就緒';
         }
         
         function updateTime() {
@@ -619,10 +620,10 @@
             document.getElementById('lastUpdateTime').textContent = now.toLocaleTimeString();
         }
         
-        // 安轉
+        // 初始化
         window.addEventListener('DOMContentLoaded', () => {
             updateFocus();
-            setInterval(updateFocus, 1000);
+            setInterval(updateFocus, 10000); // 每 10 秒更新一次
         });
     </script>
 </body>
