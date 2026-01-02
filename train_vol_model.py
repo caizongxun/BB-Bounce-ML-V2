@@ -130,6 +130,30 @@ class VolatilityModelTrainer:
         
         return df
     
+    def check_overfitting(self, train_r2, test_r2):
+        """
+        検查過據合佐（Overfitting）–回歸模式
+        """
+        gap = train_r2 - test_r2
+        
+        print(f'\n🔍 過據合佐検查：')
+        print(f'  訓練 R²: {train_r2:.4f}')
+        print(f'  測試 R²: {test_r2:.4f}')
+        print(f'  R² 寶: {gap:.4f}')
+        
+        if gap < 0.05:  # R2 寶 < 0.05
+            print(f'  ✅ 模型帷貌！沒有過據合佐')
+            return 'good'
+        elif gap < 0.15:  # R2 寶 < 0.15
+            print(f'  ⚠️ 輕微過據合佐，但可以接受')
+            return 'acceptable'
+        elif gap < 0.25:  # R2 寶 < 0.25
+            print(f'  👁 中等過據合佐，鰧詰枣殆建議授出')
+            return 'warning'
+        else:  # R2 寶 >= 0.25
+            print(f'  ❌ 嚴重過據合佐！議誮重新訓練')
+            return 'bad'
+    
     def train_single_symbol(self, symbol: str, timeframe: str, touch_range=0.02, test_size=0.2, model_type='regression'):
         """
         為單個幣種 + timeframe 訓練波動性模型
@@ -200,17 +224,23 @@ class VolatilityModelTrainer:
                 )
                 model.fit(X_train_scaled, y_train.values)
                 
-                # 驗證
-                y_pred = model.predict(X_test_scaled)
-                mse = mean_squared_error(y_test, y_pred)
-                rmse = np.sqrt(mse)
-                mae = mean_absolute_error(y_test, y_pred)
-                r2 = r2_score(y_test, y_pred)
+                # 計算訓練集 R2
+                y_train_pred = model.predict(X_train_scaled)
+                train_r2 = r2_score(y_train, y_train_pred)
                 
-                print(f'  MSE: {mse:.6f}')
-                print(f'  RMSE: {rmse:.6f}')
-                print(f'  MAE: {mae:.6f}')
-                print(f'  R²: {r2:.4f}')
+                # 計算測試集指標
+                y_test_pred = model.predict(X_test_scaled)
+                test_r2 = r2_score(y_test, y_test_pred)
+                test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))
+                test_mae = mean_absolute_error(y_test, y_test_pred)
+                
+                # 検查過據合佐
+                overfitting_status = self.check_overfitting(train_r2, test_r2)
+                
+                print(f'\n📈 主要指標（回歸）：')
+                print(f'  測試 R²: {test_r2:.4f}')
+                print(f'  測試 RMSE: {test_rmse:.6f}')
+                print(f'  測試 MAE: {test_mae:.6f}')
             else:
                 model = XGBClassifier(
                     n_estimators=100,
@@ -225,14 +255,37 @@ class VolatilityModelTrainer:
                 )
                 model.fit(X_train_scaled, y_train.values)
                 
-                # 驗證
-                y_pred = model.predict(X_test_scaled)
-                acc = accuracy_score(y_test, y_pred)
+                # 計算訓練集精準度
+                y_train_pred = model.predict(X_train_scaled)
+                train_acc = accuracy_score(y_train, y_train_pred)
                 
-                print(f'  上作: {acc:.4f}')
+                # 計算測試集精準度
+                y_test_pred = model.predict(X_test_scaled)
+                test_acc = accuracy_score(y_test, y_test_pred)
+                
+                # 検查過據合佐
+                gap = train_acc - test_acc
+                print(f'\n🔍 過據合佐検查：')
+                print(f'  訓練精準度: {train_acc:.4f} ({train_acc*100:.2f}%)')
+                print(f'  測試精準度: {test_acc:.4f} ({test_acc*100:.2f}%)')
+                print(f'  精準度寶: {gap:.4f} ({gap*100:.2f}%)')
+                
+                if gap < 0.01:
+                    print(f'  ✅ 模型帷貌！沒有過據合佐')
+                    overfitting_status = 'good'
+                elif gap < 0.05:
+                    print(f'  ⚠️ 輕微過據合佐，但可以接受')
+                    overfitting_status = 'acceptable'
+                elif gap < 0.10:
+                    print(f'  👁 中等過據合佐')
+                    overfitting_status = 'warning'
+                else:
+                    print(f'  ❌ 嚴重過據合佐！')
+                    overfitting_status = 'bad'
+                
                 print(f'\n分類報告：')
                 label_names = ['低波', '中波', '高波']
-                print(classification_report(y_test, y_pred, target_names=label_names))
+                print(classification_report(y_test, y_test_pred, target_names=label_names))
             
             # 7. 保存模型
             symbol_dir = self.models_base_dir / symbol / timeframe
@@ -248,7 +301,7 @@ class VolatilityModelTrainer:
             print(f'  {model_path}')
             print(f'  {scaler_path}')
             
-            return True
+            return overfitting_status != 'bad'
         
         except Exception as e:
             print(f'❌ 訓練失敗: {e}')
