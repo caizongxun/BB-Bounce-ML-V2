@@ -362,18 +362,13 @@
             <div class="control-group">
                 <label class="control-label">選擇幣種</label>
                 <select id="focusSymbol" onchange="updateFocus()">
-                    <option value="BTCUSDT">BTC</option>
-                    <option value="ETHUSDT">ETH</option>
-                    <option value="BNBUSDT">BNB</option>
-                    <option value="ADAUSDT">ADA</option>
-                    <option value="SOLUSDT">SOL</option>
-                    <option value="XRPUSDT">XRP</option>
+                    <option value="">載入中...</option>
                 </select>
             </div>
             
             <div class="control-group">
                 <label class="control-label">時間框架</label>
-                <select id="focusTimeframe" onchange="updateFocus()">
+                <select id="focusTimeframe" onchange="updateTimeframeOptions(); updateFocus()">
                     <option value="15m">15m</option>
                     <option value="1h">1h</option>
                     <option value="4h">4h</option>
@@ -428,8 +423,8 @@
             </div>
             
             <div class="tabs">
-                <button class="tab active" onclick="switchTab('focus')">🎯 焦點</button>
-                <button class="tab" onclick="switchTab('scan')">📡 掃描紀錄</button>
+                <button class="tab active" onclick="switchTab('focus')">焦點</button>
+                <button class="tab" onclick="switchTab('scan')">掃描紀錄</button>
             </div>
             
             <div class="content-area">
@@ -452,14 +447,90 @@
         let focusUpdateInterval = null;
         let scanUpdateInterval = null;
         let isScanning = false;
+        let availableSymbols = [];
+        let currentTimeframeOptions = {};
         
-        // UI 事件監聽
-        document.getElementById('touchRange').addEventListener('input', (e) => {
-            document.getElementById('touchRangeValue').textContent = (parseFloat(e.target.value) * 100).toFixed(1) + '%';
+        // 初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            loadAvailableSymbols();
+            setInterval(updateTime, 1000);
         });
         
-        document.getElementById('minConfidence').addEventListener('input', (e) => {
-            document.getElementById('confidenceValue').textContent = (parseFloat(e.target.value) * 100).toFixed(0) + '%';
+        // 加載所有可用幣種
+        async function loadAvailableSymbols() {
+            try {
+                const response = await fetch(`${API_BASE}/symbols`);
+                const data = await response.json();
+                availableSymbols = data.symbols || [];
+                
+                // 填充幣種下拉選單
+                const select = document.getElementById('focusSymbol');
+                select.innerHTML = '';
+                
+                for (const symbol of availableSymbols) {
+                    const option = document.createElement('option');
+                    option.value = symbol;
+                    option.textContent = symbol.replace('USDT', '');
+                    select.appendChild(option);
+                }
+                
+                // 預設選擇第一個或 BTC
+                if (availableSymbols.includes('BTCUSDT')) {
+                    select.value = 'BTCUSDT';
+                } else if (availableSymbols.length > 0) {
+                    select.value = availableSymbols[0];
+                }
+                
+                // 加載時間框架選項
+                await updateTimeframeOptions();
+                
+                // 初始化焦點更新
+                updateFocus();
+                setInterval(updateFocus, 10000); // 每 10 秒更新
+                
+            } catch (e) {
+                console.error('加載幣種失敗:', e);
+                document.getElementById('statusText').textContent = '載入失敗';
+            }
+        }
+        
+        // 更新時間框架選項
+        async function updateTimeframeOptions() {
+            const symbol = document.getElementById('focusSymbol').value;
+            if (!symbol) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/timeframes/${symbol}`);
+                const data = await response.json();
+                
+                const timeframeSelect = document.getElementById('focusTimeframe');
+                const currentValue = timeframeSelect.value;
+                
+                timeframeSelect.innerHTML = '';
+                for (const tf of data.timeframes) {
+                    const option = document.createElement('option');
+                    option.value = tf;
+                    option.textContent = tf;
+                    if (tf === currentValue || tf === '15m') {
+                        option.selected = true;
+                    }
+                    timeframeSelect.appendChild(option);
+                }
+                
+            } catch (e) {
+                console.error('加載時間框架失敗:', e);
+            }
+        }
+        
+        // UI 事件監聽
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('touchRange')?.addEventListener('input', (e) => {
+                document.getElementById('touchRangeValue').textContent = (parseFloat(e.target.value) * 100).toFixed(1) + '%';
+            });
+            
+            document.getElementById('minConfidence')?.addEventListener('input', (e) => {
+                document.getElementById('confidenceValue').textContent = (parseFloat(e.target.value) * 100).toFixed(0) + '%';
+            });
         });
         
         function switchTab(tabName) {
@@ -472,6 +543,8 @@
         async function updateFocus() {
             const symbol = document.getElementById('focusSymbol').value;
             const timeframe = document.getElementById('focusTimeframe').value;
+            
+            if (!symbol) return;
             
             const container = document.getElementById('focusContent');
             container.innerHTML = '<div class="spinner"></div> 正在加載...';
@@ -594,6 +667,7 @@
         
         function selectSymbol(symbol) {
             document.getElementById('focusSymbol').value = symbol;
+            updateTimeframeOptions();
             updateFocus();
             switchTab('focus');
         }
@@ -619,12 +693,6 @@
             const now = new Date();
             document.getElementById('lastUpdateTime').textContent = now.toLocaleTimeString();
         }
-        
-        // 初始化
-        window.addEventListener('DOMContentLoaded', () => {
-            updateFocus();
-            setInterval(updateFocus, 10000); // 每 10 秒更新一次
-        });
     </script>
 </body>
 </html>
