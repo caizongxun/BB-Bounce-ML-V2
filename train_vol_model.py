@@ -136,9 +136,10 @@ class VolatilityModelTrainer:
         
         model_type: 'regression' 或 'classification'
         """
-        print(f'\n{"="*60}')
+        separator = '='*60
+        print(f'\n{separator}')
         print(f'📚 訓練 {symbol} {timeframe} 波動性模型 ({model_type})')
-        print(f'{"="*60}')
+        print(f'{separator}')
         
         try:
             # 1. 下載數據
@@ -251,6 +252,8 @@ class VolatilityModelTrainer:
         
         except Exception as e:
             print(f'❌ 訓練失敗: {e}')
+            import traceback
+            traceback.print_exc()
             return False
     
     def run_full_pipeline(self, touch_range=0.02, test_size=0.2, model_type='regression'):
@@ -267,9 +270,10 @@ class VolatilityModelTrainer:
                 if self.train_single_symbol(symbol, timeframe, touch_range, test_size, model_type):
                     success_count += 1
         
-        print(f'\n{"="*60}')
+        separator = '='*60
+        print(f'\n{separator}')
         print(f'✅ 訓練完成！成功: {success_count}/{total_count}')
-        print(f'{"="*60}')
+        print(f'{separator}')
         print(f'模型保存位置: {self.models_base_dir}')
         print(f'結構：models/vol_models/<SYMBOL>/<TIMEFRAME>/')
 
