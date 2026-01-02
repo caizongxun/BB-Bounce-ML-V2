@@ -97,9 +97,10 @@ class BBModelTrainer:
         """
         為單個幣種 + timeframe 訓練模型
         """
-        print(f'\n{'='*60}')
+        separator = '='*60
+        print(f'\n{separator}')
         print(f'🎯 訓練 {symbol} {timeframe} 模型')
-        print(f'{'='*60}')
+        print(f'{separator}')
         
         try:
             # 1. 下載數據
@@ -112,11 +113,11 @@ class BBModelTrainer:
             print(f'🔧 產生標籤...')
             df = self.generator.create_training_dataset(df, lookahead=5, touch_range=touch_range)
             
-            # 3. 產生特徵
-            print(f'🔧 產生特徵...')
+            # 3. 產生特录
+            print(f'🔧 產生特录...')
             df = self.create_features(df)
             
-            # 4. 選擇特徵
+            # 4. 選擇特录
             feature_cols = [
                 'price_to_bb_middle', 'dist_upper_norm', 'dist_lower_norm',
                 'bb_width', 'rsi', 'volatility', 'returns_std',
@@ -193,6 +194,8 @@ class BBModelTrainer:
         
         except Exception as e:
             print(f'❌ 訓練失敗: {e}')
+            import traceback
+            traceback.print_exc()
             return False
     
     def run_full_pipeline(self, touch_range=0.02, test_size=0.2):
@@ -209,9 +212,10 @@ class BBModelTrainer:
                 if self.train_single_symbol(symbol, timeframe, touch_range, test_size):
                     success_count += 1
         
-        print(f'\n{'='*60}')
+        separator = '='*60
+        print(f'\n{separator}')
         print(f'✅ 訓練完成！成功: {success_count}/{total_count}')
-        print(f'{'='*60}')
+        print(f'{separator}')
         print(f'模型保存位置: {self.models_base_dir}')
         print(f'結構：models/bb_models/<SYMBOL>/<TIMEFRAME>/')
 
