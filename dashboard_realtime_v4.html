@@ -531,7 +531,7 @@
             background: #f44336;
         }
 
-        /* 更新時間戳 */
+        /* 更新時間時間時 */
         .update-timestamp {
             font-size: 11px;
             color: #80d0d8;
@@ -700,6 +700,7 @@
 
     <script>
         const API_BASE = 'http://localhost:5000';
+        const BINANCE_API = 'https://api.binance.com/api/v3';
         const SYMBOLS = [
             'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT',
             'SOLUSDT', 'LTCUSDT', 'AVAXUSDT', 'LINKUSDT', 'UNIUSDT', 'ATOMUSDT',
@@ -712,6 +713,30 @@
         let allSymbolsInterval = null;
         let lastDetailSymbol = 'BTCUSDT';
         let lastDetailTimeframe = '15m';
+
+        // 從 Binance 取得最新 K 線數據
+        async function fetchOHLCV(symbol, timeframe) {
+            try {
+                const response = await fetch(
+                    `${BINANCE_API}/klines?symbol=${symbol}&interval=${timeframe}&limit=1`
+                );
+                const data = await response.json();
+                if (data && data.length > 0) {
+                    const kline = data[0];
+                    return {
+                        open: parseFloat(kline[1]),
+                        high: parseFloat(kline[2]),
+                        low: parseFloat(kline[3]),
+                        close: parseFloat(kline[4]),
+                        volume: parseFloat(kline[7])
+                    };
+                }
+                return null;
+            } catch (error) {
+                console.error(`取得 ${symbol} 數據失敗:`, error);
+                return null;
+            }
+        }
 
         // Tab 切換
         function switchTab(tabIndex) {
@@ -740,25 +765,35 @@
             const container = document.getElementById('detail-content');
             
             try {
+                container.innerHTML = '<div class="loading-text">正在加載數據...</div>';
+                
+                // 第1步：從 Binance 取數據
+                const ohlcv = await fetchOHLCV(symbol, timeframe);
+                if (!ohlcv) {
+                    container.innerHTML = `<div class="empty-state"><div class="empty-state-title">錯誤</div><p>無法从 Binance 取得數據</p></div>`;
+                    return;
+                }
+
+                // 第2步：傳送給你的模型 API
                 const response = await fetch(`${API_BASE}/predict`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         symbol: symbol,
                         timeframe: timeframe,
-                        ohlcv: { open: 0, high: 0, low: 0, close: 0, volume: 0 }
+                        ohlcv: ohlcv  // 基本實時數據
                     })
                 });
 
                 const data = await response.json();
-                container.innerHTML = renderDetailPanel(data, symbol, timeframe);
+                container.innerHTML = renderDetailPanel(data, symbol, timeframe, ohlcv);
                 updateTimestamp();
             } catch (error) {
                 container.innerHTML = `<div class="empty-state"><div class="empty-state-title">錯誤</div><p>${error.message}</p></div>`;
             }
         }
 
-        function renderDetailPanel(data, symbol, timeframe) {
+        function renderDetailPanel(data, symbol, timeframe, ohlcv) {
             const bb = data.bb_touch || {};
             const approach = bb.approach || {};
             const touched = bb.touched || false;
@@ -767,13 +802,13 @@
             const vol = data.volatility || {};
 
             let statusClass = 'warning';
-            let statusText = '未觸及';
+            let statusText = '未觸厬';
             if (touched && touchType === 'lower') {
                 statusClass = 'positive';
-                statusText = '觸及下軌';
+                statusText = '觸厬下軌';
             } else if (touched && touchType === 'upper') {
                 statusClass = 'negative';
-                statusText = '觸及上軌';
+                statusText = '觸厬上軌';
             }
 
             let volClass = 'vol-low';
@@ -791,7 +826,7 @@
 
                 approachingHTML = `
                     <div class="approaching-progress">
-                        <div class="progress-title">接近程度監測</div>
+                        <div class="progress-title">接近程度監測 (基於 Binance 實時數據)</div>
                         <div class="progress-row">
                             <div class="progress-label">接近上軌</div>
                             <div class="progress-bar">
@@ -831,6 +866,10 @@
                     <div class="detail-item">
                         <div class="detail-label">信心度</div>
                         <div class="detail-value">${confidence}%</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">當前價格 (OHLCV)</div>
+                        <div class="detail-value">${ohlcv.close.toFixed(2)}</div>
                     </div>
                     ${vol.volatility_level ? `
                         <div class="detail-item">
@@ -880,27 +919,30 @@
             try {
                 let html = '';
                 for (const symbol of SYMBOLS) {
+                    const ohlcv = await fetchOHLCV(symbol, '15m');
+                    if (!ohlcv) continue;
+
                     const response = await fetch(`${API_BASE}/predict`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             symbol: symbol,
                             timeframe: '15m',
-                            ohlcv: { open: 0, high: 0, low: 0, close: 0, volume: 0 }
+                            ohlcv: ohlcv
                         })
                     });
 
                     const data = await response.json();
-                    html += renderSymbolCard(data, symbol);
+                    html += renderSymbolCard(data, symbol, ohlcv);
                 }
-                container.innerHTML = html;
+                container.innerHTML = html || '<div class="empty-state"><div class="empty-state-title">沒有數據</div></div>';
                 updateTimestamp();
             } catch (error) {
                 container.innerHTML = `<div class="empty-state"><div class="empty-state-title">載入失敗</div></div>`;
             }
         }
 
-        function renderSymbolCard(data, symbol) {
+        function renderSymbolCard(data, symbol, ohlcv) {
             const bb = data.bb_touch || {};
             const approach = bb.approach || {};
             const touched = bb.touched || false;
@@ -987,7 +1029,7 @@
                             </div>
                             <div class="symbol-bb-item">
                                 <div class="symbol-bb-label">現價</div>
-                                <div class="symbol-bb-value">${parseFloat(bb.current_high).toFixed(0)}</div>
+                                <div class="symbol-bb-value">${ohlcv.close.toFixed(0)}</div>
                             </div>
                         </div>
                     ` : ''}
