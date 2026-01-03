@@ -30,6 +30,7 @@ class RealtimeBBDetectorV2:
         device: str = "cpu",
         history_window: int = 100,
     ):
+        # 完整的 22 個幣種列表
         self.symbols = symbols or [
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
             "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "TONUSDT", "LINKUSDT",
@@ -48,10 +49,13 @@ class RealtimeBBDetectorV2:
         # 有效性模型 (層級2) - 檢測是否為有效支撐/阻力
         self.validity_models = {}  # symbol -> 有效性模型
         
-        # 歷史數據緩衝區
+        # 歷史數據緩衝區 (用來計算技術指標)
         self.candle_buffer = {}  # symbol -> deque of candles
         for sym in self.symbols:
             self.candle_buffer[sym] = deque(maxlen=history_window)
+        
+        # 上次信號時間戳 (避免重複推送)
+        self.last_signal_time = {}  # symbol -> timestamp
         
         # 加載模型
         self._load_models()
@@ -303,7 +307,7 @@ class RealtimeBBDetectorV2:
                 
                 bb_position = (close - bb_lower) / bb_width
                 
-                # 簡單啟發式: 若在上下 10% 則判定接近
+                # 簡易啟發式: 若在上下 10% 則判定接近
                 if bb_position > 0.9:
                     layer1_class = 1  # 接近上軌
                 elif bb_position < 0.1:
@@ -384,6 +388,9 @@ class RealtimeBBDetectorV2:
         """
         取得幣種目前狀態 (用於儀表板左側列表)
         """
+        if symbol not in self.candle_buffer:
+            return {"symbol": symbol, "status": "unknown"}
+        
         candles = list(self.candle_buffer[symbol])
         if len(candles) == 0:
             return {"symbol": symbol, "status": "no_data"}
@@ -398,5 +405,14 @@ class RealtimeBBDetectorV2:
             "timestamp": last.get("timestamp", 0),
             "close": float(last.get("close", 0)),
             "rsi": float(last.get("rsi", 50)),
-            "status": "active" if signal else "idle",
+            "status": "has_signal" if signal else "idle",
         }
+
+    def get_all_symbols_state(self) -> Dict[str, Dict]:
+        """
+        一次取得所有幣種的狀態 (用於初始化儀表板列表)
+        """
+        states = {}
+        for symbol in self.symbols:
+            states[symbol] = self.get_symbol_state(symbol)
+        return states
