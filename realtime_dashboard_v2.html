@@ -8,1427 +8,554 @@
     :root {
       --color-white: rgba(255, 255, 255, 1);
       --color-black: rgba(0, 0, 0, 1);
-      --color-cream-50: rgba(252, 252, 249, 1);
-      --color-cream-100: rgba(255, 255, 253, 1);
-      --color-gray-200: rgba(245, 245, 245, 1);
-      --color-gray-300: rgba(167, 169, 169, 1);
-      --color-gray-400: rgba(119, 124, 124, 1);
-      --color-slate-500: rgba(98, 108, 113, 1);
-      --color-brown-600: rgba(94, 82, 64, 1);
       --color-charcoal-700: rgba(31, 33, 33, 1);
       --color-charcoal-800: rgba(38, 40, 40, 1);
-      --color-slate-900: rgba(19, 52, 59, 1);
+      --color-gray-200: rgba(245, 245, 245, 1);
+      --color-gray-300: rgba(167, 169, 169, 1);
       --color-teal-300: rgba(50, 184, 198, 1);
       --color-teal-400: rgba(45, 166, 178, 1);
       --color-teal-500: rgba(33, 128, 141, 1);
-      --color-teal-600: rgba(29, 116, 128, 1);
-      --color-teal-700: rgba(26, 104, 115, 1);
-      --color-teal-800: rgba(41, 150, 161, 1);
       --color-red-400: rgba(255, 84, 89, 1);
       --color-red-500: rgba(192, 21, 47, 1);
       --color-orange-400: rgba(230, 129, 97, 1);
-      --color-orange-500: rgba(168, 75, 47, 1);
-      --color-brown-600-rgb: 94, 82, 64;
-      --color-teal-500-rgb: 33, 128, 141;
-      --color-slate-900-rgb: 19, 52, 59;
-      --color-slate-500-rgb: 98, 108, 113;
-      --color-red-500-rgb: 192, 21, 47;
-      --color-red-400-rgb: 255, 84, 89;
-      --color-orange-500-rgb: 168, 75, 47;
-      --color-orange-400-rgb: 230, 129, 97;
-
-      --color-background: var(--color-charcoal-700);
-      --color-surface: var(--color-charcoal-800);
-      --color-text: var(--color-gray-200);
-      --color-text-secondary: rgba(245, 245, 245, 0.7);
-      --color-primary: var(--color-teal-300);
-      --color-primary-hover: var(--color-teal-400);
-      --color-primary-active: var(--color-teal-800);
-      --color-secondary: rgba(119, 124, 124, 0.15);
-      --color-secondary-hover: rgba(119, 124, 124, 0.25);
-      --color-border: rgba(119, 124, 124, 0.3);
-      --color-error: var(--color-red-400);
-      --color-success: var(--color-teal-300);
-      --color-warning: var(--color-orange-400);
-      --color-focus-ring: rgba(50, 184, 198, 0.4);
-
-      --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      --radius-base: 8px;
-      --radius-lg: 12px;
-      --radius-full: 9999px;
-      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
-      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.55);
-      --focus-ring: 0 0 0 3px var(--color-focus-ring);
+      --color-green-500: rgba(34, 197, 94, 1);
+      --color-yellow-400: rgba(250, 204, 21, 1);
+      --color-blue-500: rgba(59, 130, 246, 1);
     }
 
-    *,
-    *::before,
-    *::after {
-      box-sizing: border-box;
-    }
-
-    html,
-    body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      font-family: var(--font-family-base);
-      background: radial-gradient(circle at top left, #243b53 0, #111827 45%, #020617 100%);
-      color: var(--color-text);
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1a202c 50%, #111827 100%);
+      color: var(--color-gray-200);
       -webkit-font-smoothing: antialiased;
     }
 
-    body {
-      display: flex;
-      align-items: stretch;
-      justify-content: center;
-    }
+    body { display: flex; }
 
     .app-shell {
       display: grid;
-      grid-template-rows: auto 1fr auto;
-      grid-template-columns: 260px minmax(0, 1.8fr) minmax(0, 1.2fr);
+      grid-template-rows: auto auto 1fr auto;
+      grid-template-columns: 300px 1fr 350px;
       gap: 16px;
       width: 100%;
-      max-width: 1440px;
+      max-width: 1600px;
+      margin: 0 auto;
       padding: 16px 20px;
     }
 
     header {
       grid-column: 1 / 4;
       display: flex;
-      align-items: center;
       justify-content: space-between;
-      padding: 14px 18px;
-      border-radius: 16px;
-      background: radial-gradient(circle at top left, rgba(45, 166, 178, 0.25), transparent 55%), rgba(15, 23, 42, 0.94);
-      box-shadow: var(--shadow-md);
-      border: 1px solid rgba(148, 163, 184, 0.4);
-      backdrop-filter: blur(18px);
-    }
-
-    .header-left {
-      display: flex;
       align-items: center;
-      gap: 14px;
-    }
-
-    .app-badge {
-      width: 36px;
-      height: 36px;
+      padding: 16px 20px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(148, 163, 184, 0.3);
       border-radius: 12px;
-      background: radial-gradient(circle at 30% 0, #a5f3fc, transparent 55%), radial-gradient(circle at 75% 90%, #22d3ee, #0f172a);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.6);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     }
 
-    .app-badge span {
-      font-family: var(--font-family-mono);
-      font-size: 13px;
-      font-weight: 600;
-      color: #0b1120;
+    .header-title h1 { margin: 0; font-size: 20px; font-weight: 600; color: var(--color-gray-200); }
+    .header-controls { display: flex; gap: 12px; }
+    .btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.2s; }
+    .btn-primary { background: linear-gradient(135deg, var(--color-green-500), var(--color-teal-400)); color: #0b1120; }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(34, 197, 94, 0.4); }
+    .btn-secondary { background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.5); color: var(--color-gray-200); }
+    .btn-secondary:hover { background: rgba(148, 163, 184, 0.3); }
+
+    .control-section {
+      grid-column: 1 / 4;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      padding: 16px 20px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 12px;
     }
 
-    .header-title-block {
+    .control-group {
       display: flex;
       flex-direction: column;
-      gap: 3px;
-    }
-
-    .header-title {
-      display: flex;
-      align-items: baseline;
       gap: 8px;
     }
 
-    .header-title h1 {
-      margin: 0;
-      font-size: 19px;
-      font-weight: 600;
-      letter-spacing: 0.01em;
-      color: #e5e7eb;
-    }
-
-    .header-title .pill {
-      font-size: 11px;
-      padding: 2px 7px;
-      border-radius: 999px;
-      border: 1px solid rgba(56, 189, 248, 0.7);
-      color: #7dd3fc;
-      background: linear-gradient(to right, rgba(15, 23, 42, 0.9), rgba(8, 47, 73, 0.9));
-    }
-
-    .header-subtitle {
+    .control-label {
       font-size: 12px;
-      color: #9ca3af;
+      font-weight: 600;
+      color: var(--color-gray-300);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }
 
-    .header-subtitle strong {
-      color: #e5e7eb;
-      font-weight: 500;
+    select, input[type="checkbox"] {
+      padding: 8px 12px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      border-radius: 6px;
+      color: var(--color-gray-200);
+      font-size: 12px;
+      cursor: pointer;
     }
 
-    .header-right {
+    select:focus { outline: none; border-color: var(--color-teal-400); }
+
+    .checkbox-row {
       display: flex;
       align-items: center;
-      gap: 12px;
-    }
-
-    .stat-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: radial-gradient(circle at top left, rgba(34, 197, 94, 0.35), transparent 55%), rgba(15, 23, 42, 0.95);
-      border: 1px solid rgba(34, 197, 94, 0.5);
-      font-size: 11px;
-      color: #bbf7d0;
-    }
-
-    .stat-pill span.value {
-      font-weight: 600;
-      color: #22c55e;
-    }
-
-    .btn-outline {
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.5);
-      background: rgba(15, 23, 42, 0.85);
-      color: #e5e7eb;
-      padding: 7px 14px;
+      gap: 8px;
       font-size: 12px;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      cursor: pointer;
-      transition: all 0.16s ease-out;
-    }
-
-    .btn-outline:hover {
-      border-color: rgba(148, 163, 184, 0.9);
-      background: rgba(15, 23, 42, 1);
-      transform: translateY(-0.5px);
-      box-shadow: 0 6px 16px rgba(15, 23, 42, 0.5);
-    }
-
-    .btn-primary {
-      border-radius: 999px;
-      border: none;
-      background: linear-gradient(135deg, #22c55e, #0ea5e9);
-      color: #0b1120;
-      padding: 8px 16px;
-      font-size: 12px;
-      font-weight: 600;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      cursor: pointer;
-      box-shadow: 0 10px 25px rgba(8, 47, 73, 0.75);
-      transition: transform 0.13s ease-out, box-shadow 0.13s ease-out, filter 0.13s ease-out;
-    }
-
-    .btn-primary:hover {
-      transform: translateY(-1px);
-      filter: brightness(1.05);
-      box-shadow: 0 14px 32px rgba(8, 47, 73, 0.9);
-    }
-
-    .btn-primary span.icon {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 18px;
-      height: 18px;
-      border-radius: 999px;
-      background: rgba(15, 23, 42, 0.85);
-      color: #a5f3fc;
-      font-size: 11px;
     }
 
     .layout-main {
-      grid-row: 2;
+      grid-row: 3;
       grid-column: 1 / 4;
       display: grid;
-      grid-template-columns: 260px minmax(0, 1.8fr) minmax(0, 1.2fr);
+      grid-template-columns: 300px 1fr 350px;
       gap: 16px;
       align-items: start;
     }
 
     .panel {
-      border-radius: 14px;
-      background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 1));
-      border: 1px solid rgba(55, 65, 81, 0.9);
-      box-shadow: var(--shadow-sm);
-      padding: 12px 12px 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 4px;
-    }
-
-    .panel-title {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .panel-title h2 {
-      margin: 0;
-      font-size: 13px;
-      font-weight: 600;
-      color: #e5e7eb;
-      letter-spacing: 0.01em;
-    }
-
-    .panel-title span.sub {
-      font-size: 11px;
-      color: #9ca3af;
-    }
-
-    .tag {
-      font-size: 10px;
-      padding: 2px 7px;
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.7);
-      color: #e5e7eb;
+      border-radius: 12px;
       background: rgba(15, 23, 42, 0.9);
-    }
-
-    .sidebar-section {
+      border: 1px solid rgba(55, 65, 81, 0.8);
+      padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
 
-    .sidebar-section h3 {
-      margin: 0;
-      font-size: 11px;
-      font-weight: 500;
-      color: #9ca3af;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .selection-info {
-      font-size: 11px;
-      color: #9ca3af;
-      padding: 6px 8px;
-      border-radius: 8px;
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(55, 65, 81, 0.9);
-    }
-
-    .selection-info span.count {
-      color: #bbf7d0;
-      font-weight: 600;
-    }
+    .panel-title { font-size: 14px; font-weight: 600; color: var(--color-gray-200); margin: 0; margin-bottom: 8px; border-bottom: 1px solid rgba(148, 163, 184, 0.2); padding-bottom: 8px; }
 
     .symbol-list {
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      max-height: 400px;
+      gap: 8px;
+      max-height: 500px;
       overflow-y: auto;
-      padding-right: 2px;
     }
 
     .symbol-item {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 6px 8px;
-      border-radius: 10px;
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(55, 65, 81, 0.9);
+      padding: 10px 12px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(55, 65, 81, 0.8);
+      border-radius: 8px;
       cursor: pointer;
-      transition: background 0.12s ease-out, border-color 0.12s ease-out, transform 0.12s ease-out;
-    }
-
-    .symbol-item:hover {
-      background: rgba(15, 23, 42, 1);
-      border-color: rgba(59, 130, 246, 0.65);
-      transform: translateY(-0.5px);
-    }
-
-    .symbol-item.selected {
-      border-color: rgba(56, 189, 248, 0.9);
-      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.55);
-      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.25), transparent 60%), rgba(15, 23, 42, 0.98);
-    }
-
-    .symbol-main {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      flex: 1;
-    }
-
-    .symbol-name-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-    }
-
-    .symbol-name {
-      font-weight: 500;
-      color: #e5e7eb;
-    }
-
-    .symbol-tf {
-      font-size: 10px;
-      padding: 1px 6px;
-      border-radius: 999px;
-      background: rgba(30, 64, 175, 0.85);
-      color: #bfdbfe;
-    }
-
-    .symbol-status {
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 999px;
-      color: #a3e635;
-      background: rgba(132, 204, 22, 0.2);
-    }
-
-    .symbol-status.idle {
-      color: #9ca3af;
-      background: rgba(75, 85, 99, 0.2);
-    }
-
-    .symbol-meta {
-      font-size: 11px;
-      color: #9ca3af;
-    }
-
-    .symbol-checkbox {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 18px;
-      height: 18px;
-      border: 1.5px solid rgba(148, 163, 184, 0.6);
-      border-radius: 6px;
-      background: transparent;
-      cursor: pointer;
-      transition: all 0.12s ease-out;
-    }
-
-    .symbol-item.selected .symbol-checkbox {
-      background: #22c55e;
-      border-color: #22c55e;
-    }
-
-    .symbol-checkbox::after {
-      content: "\2713";
-      color: #0b1120;
-      font-size: 12px;
-      font-weight: 600;
-      display: none;
-    }
-
-    .symbol-item.selected .symbol-checkbox::after {
-      display: block;
-    }
-
-    .signals-panel {
-      min-height: 320px;
-    }
-
-    .signals-toolbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 6px;
-    }
-
-    .filters-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-
-    .chip {
-      font-size: 10px;
-      padding: 3px 8px;
-      border-radius: 999px;
-      background: rgba(17, 24, 39, 0.9);
-      border: 1px solid rgba(55, 65, 81, 0.9);
-      color: #e5e7eb;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      transition: background 0.12s ease-out, border-color 0.12s ease-out, transform 0.12s ease-out;
-    }
-
-    .chip span.dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 999px;
-    }
-
-    .chip.active {
-      background: rgba(15, 23, 42, 1);
-      border-color: rgba(59, 130, 246, 0.9);
-      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.85);
-      transform: translateY(-0.5px);
-    }
-
-    .chip.quality-high span.dot {
-      background: #22c55e;
-    }
-
-    .chip.quality-med span.dot {
-      background: #f97316;
-    }
-
-    .chip.quality-low span.dot {
-      background: #ef4444;
-    }
-
-    .chip-direction-long span.dot {
-      background: #22c55e;
-    }
-
-    .chip-direction-short span.dot {
-      background: #f97316;
-    }
-
-    .chip span.key {
-      color: #9ca3af;
-      font-family: var(--font-family-mono);
-    }
-
-    .signals-summary {
-      font-size: 11px;
-      color: #9ca3af;
-    }
-
-    .signals-summary strong {
-      color: #e5e7eb;
-      font-weight: 500;
-    }
-
-    .signals-table-wrapper {
-      border-radius: 10px;
-      border: 1px solid rgba(31, 41, 55, 1);
-      background: rgba(15, 23, 42, 0.98);
-      overflow: hidden;
-      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.75);
-    }
-
-    .signals-table-header {
-      display: grid;
-      grid-template-columns: 90px 60px 90px 80px 70px minmax(0, 1fr);
-      font-size: 11px;
-      padding: 6px 8px;
-      background: linear-gradient(to right, rgba(15, 23, 42, 1), rgba(17, 24, 39, 1));
-      color: #9ca3af;
-      border-bottom: 1px solid rgba(31, 41, 55, 1);
-    }
-
-    .signals-table-body {
-      max-height: 260px;
-      overflow-y: auto;
-    }
-
-    .signal-row {
-      display: grid;
-      grid-template-columns: 90px 60px 90px 80px 70px minmax(0, 1fr);
-      font-size: 11px;
-      padding: 6px 8px;
-      align-items: center;
-      border-bottom: 1px solid rgba(31, 41, 55, 0.85);
-      cursor: pointer;
-      transition: background 0.12s ease-out;
-    }
-
-    .signal-row:hover {
-      background: rgba(15, 23, 42, 1);
-    }
-
-    .signal-row:last-child {
-      border-bottom: none;
-    }
-
-    .signal-row .symbol {
-      font-weight: 500;
-      color: #e5e7eb;
-    }
-
-    .signal-row .side-long {
-      color: #22c55e;
-      font-weight: 500;
-    }
-
-    .signal-row .side-short {
-      color: #fb923c;
-      font-weight: 500;
-    }
-
-    .badge-quality {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 10px;
-      font-weight: 500;
-    }
-
-    .badge-quality.excellent {
-      background: rgba(22, 163, 74, 0.2);
-      border: 1px solid rgba(34, 197, 94, 0.7);
-      color: #bbf7d0;
-    }
-
-    .badge-quality.good {
-      background: rgba(34, 197, 94, 0.12);
-      border: 1px solid rgba(74, 222, 128, 0.7);
-      color: #a7f3d0;
-    }
-
-    .badge-quality.moderate {
-      background: rgba(234, 179, 8, 0.12);
-      border: 1px solid rgba(234, 179, 8, 0.6);
-      color: #fed7aa;
-    }
-
-    .badge-quality.weak {
-      background: rgba(248, 113, 113, 0.12);
-      border: 1px solid rgba(248, 113, 113, 0.6);
-      color: #fecaca;
-    }
-
-    .score-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 7px;
-      border-radius: 999px;
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(31, 41, 55, 1);
-      color: #e5e7eb;
-      font-size: 10px;
-    }
-
-    .score-pill span.label {
-      color: #9ca3af;
-    }
-
-    .score-pill span.value {
-      font-family: var(--font-family-mono);
-      color: #e5e7eb;
-    }
-
-    .meta-chips {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      flex-wrap: wrap;
-    }
-
-    .meta-chip {
-      font-size: 10px;
-      padding: 1px 6px;
-      border-radius: 999px;
-      background: rgba(17, 24, 39, 0.9);
-      border: 1px solid rgba(31, 41, 55, 1);
-      color: #9ca3af;
-    }
-
-    .meta-chip span.key {
-      color: #6b7280;
-    }
-
-    .overview-panel {
-      min-height: 320px;
-    }
-
-    .overview-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-    }
-
-    .metric-card {
-      border-radius: 10px;
-      background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.3), transparent 60%), rgba(15, 23, 42, 0.98);
-      border: 1px solid rgba(37, 99, 235, 0.85);
-      padding: 8px 9px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.8);
-    }
-
-    .metric-card.alt {
-      background: radial-gradient(circle at top left, rgba(34, 197, 94, 0.25), transparent 60%), rgba(15, 23, 42, 0.98);
-      border-color: rgba(34, 197, 94, 0.85);
-    }
-
-    .metric-label {
-      font-size: 11px;
-      color: #9ca3af;
-    }
-
-    .metric-value {
-      display: flex;
-      align-items: baseline;
-      gap: 4px;
-    }
-
-    .metric-value span.main {
-      font-size: 18px;
-      font-weight: 600;
-      color: #e5e7eb;
-    }
-
-    .metric-value span.suffix {
-      font-size: 11px;
-      color: #9ca3af;
-    }
-
-    .metric-tagline {
-      font-size: 10px;
-      color: #a5b4fc;
-    }
-
-    .metric-footnote {
-      font-size: 10px;
-      color: #9ca3af;
-    }
-
-    .mini-chart-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 3px;
-    }
-
-    .mini-chart-bar {
-      flex: 1;
-      height: 5px;
-      border-radius: 999px;
-      background: linear-gradient(90deg, #22c55e, #eab308, #ef4444);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .mini-chart-knob {
-      position: absolute;
-      top: -2px;
-      width: 9px;
-      height: 9px;
-      border-radius: 999px;
-      border: 1px solid #e5e7eb;
-      background: #0f172a;
-      box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.6);
-    }
-
-    .mini-chart-label {
-      font-size: 10px;
-      color: #9ca3af;
-      min-width: 56px;
-    }
-
-    .signal-quality-card {
-      margin-top: 4px;
-      border-radius: 10px;
-      border: 1px solid rgba(55, 65, 81, 1);
-      background: rgba(15, 23, 42, 0.98);
-      padding: 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .quality-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .quality-header span.label {
-      font-size: 11px;
-      color: #9ca3af;
-    }
-
-    .quality-header span.value {
-      font-size: 11px;
-      color: #bbf7d0;
-      font-weight: 500;
-    }
-
-    .quality-badges {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-    }
-
-    .quality-badge {
-      font-size: 10px;
-      padding: 2px 7px;
-      border-radius: 999px;
-      border: 1px solid rgba(55, 65, 81, 1);
-      background: rgba(15, 23, 42, 1);
-      color: #e5e7eb;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .quality-badge span.dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 999px;
-    }
-
-    .quality-badge.excellent span.dot {
-      background: #22c55e;
-    }
-
-    .quality-badge.good span.dot {
-      background: #4ade80;
-    }
-
-    .quality-badge.moderate span.dot {
-      background: #eab308;
-    }
-
-    .quality-badge.weak span.dot {
-      background: #fb923c;
-    }
-
-    .quality-badge.poor span.dot {
-      background: #ef4444;
-    }
-
-    .footer {
-      grid-row: 3;
-      grid-column: 1 / 4;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 11px;
-      color: #6b7280;
-      padding-top: 4px;
-    }
-
-    .footer span strong {
-      color: #e5e7eb;
-      font-weight: 500;
-    }
-
-    .footer-links {
-      display: flex;
-      align-items: center;
+      transition: all 0.15s;
       gap: 10px;
     }
 
-    .footer-links a {
-      color: #9ca3af;
-      text-decoration: none;
-      border-bottom: 1px dotted rgba(75, 85, 99, 1);
+    .symbol-item:hover {
+      border-color: var(--color-teal-400);
+      background: rgba(50, 184, 198, 0.1);
     }
 
-    .footer-links a:hover {
-      color: #e5e7eb;
-      border-bottom-style: solid;
+    .symbol-item.selected {
+      border-color: var(--color-teal-400);
+      background: rgba(50, 184, 198, 0.15);
+      box-shadow: 0 0 12px rgba(50, 184, 198, 0.3);
     }
 
-    @media (max-width: 1100px) {
-      .app-shell {
-        grid-template-rows: auto auto auto auto;
-        grid-template-columns: minmax(0, 1fr);
-      }
-
-      header,
-      .layout-main,
-      .footer {
-        grid-column: 1 / 2;
-      }
-
-      .layout-main {
-        grid-template-columns: minmax(0, 1fr);
-      }
+    .symbol-checkbox {
+      width: 18px; height: 18px; border-radius: 4px;
+      border: 2px solid rgba(148, 163, 184, 0.5);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
     }
 
-    @media (max-width: 768px) {
-      .signals-table-header {
-        font-size: 10px;
-      }
-
-      .signal-row {
-        font-size: 10px;
-      }
+    .symbol-item.selected .symbol-checkbox {
+      background: var(--color-teal-400);
+      border-color: var(--color-teal-400);
     }
+
+    .symbol-item.selected .symbol-checkbox::after {
+      content: "\2713"; color: #0b1120; font-weight: 600; font-size: 12px;
+    }
+
+    .symbol-name { font-weight: 500; font-size: 13px; flex: 1; }
+    .symbol-status { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: rgba(34, 197, 94, 0.2); color: var(--color-green-500); }
+
+    .signals-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+
+    .signal-card {
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(55, 65, 81, 0.8);
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+
+    .signal-card:hover { border-color: var(--color-teal-400); background: rgba(50, 184, 198, 0.05); }
+
+    .signal-header {
+      grid-column: 1 / 3;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .signal-symbol { font-weight: 600; color: var(--color-gray-200); font-size: 13px; }
+    .signal-time { font-size: 11px; color: var(--color-gray-300); }
+    .signal-side-long { color: var(--color-green-500); font-weight: 600; }
+    .signal-side-short { color: var(--color-orange-400); font-weight: 600; }
+
+    .signal-stat { display: flex; justify-content: space-between; font-size: 11px; }
+    .signal-label { color: var(--color-gray-300); }
+    .signal-value { color: var(--color-gray-200); font-weight: 500; }
+
+    .quality-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .quality-excellent { background: rgba(34, 197, 94, 0.3); color: var(--color-green-500); }
+    .quality-good { background: rgba(34, 197, 94, 0.2); color: #a3e635; }
+    .quality-moderate { background: rgba(250, 204, 21, 0.2); color: var(--color-yellow-400); }
+
+    .debug-panel {
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(100, 150, 100, 0.3);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      color: #22c55e;
+      max-height: 300px;
+      overflow-y: auto;
+      line-height: 1.4;
+    }
+
+    .debug-line { margin: 2px 0; }
+    .debug-time { color: #60a5fa; }
+    .debug-model { color: #a78bfa; }
+    .debug-info { color: #22c55e; }
+    .debug-error { color: #ef4444; }
+
+    footer {
+      grid-column: 1 / 4;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 20px;
+      font-size: 11px;
+      color: var(--color-gray-300);
+      border-top: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    @media (max-width: 1200px) {
+      .layout-main { grid-template-columns: 1fr; }
+      .app-shell { grid-template-columns: 1fr; }
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); }
+    ::-webkit-scrollbar-thumb { background: rgba(100, 150, 100, 0.5); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(100, 150, 100, 0.8); }
   </style>
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" integrity="sha384-y7LRFvVvBUGcZ5Z15aVCis0UTG2iMV8nskd6QZnIcXtNCmieYwgd0CQpZK0s8NXM" crossorigin="anonymous"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
   <div class="app-shell">
     <header>
-      <div class="header-left">
-        <div class="app-badge"><span>V2</span></div>
-        <div class="header-title-block">
-          <div class="header-title">
-            <h1>BB Bounce ML Realtime Detector</h1>
-            <span class="pill">22 Symbols · 2-Layer Detection</span>
-          </div>
-          <div class="header-subtitle">
-            <strong>企業級實時檢測系統</strong> · 位置模型 99% · 有效性模型 94.5% · 訊號延遲 &lt; 1 秒 · 播描間隔 5 秒
-          </div>
-        </div>
+      <div class="header-title">
+        <h1>BB Bounce ML V2 - 實時檢測器</h1>
       </div>
-      <div class="header-right">
-        <div class="stat-pill">
-          <span>組合準確度</span>
-          <span class="value" id="combined-accuracy">93–97%</span>
-        </div>
-        <button class="btn-outline" id="toggle-pause">
-          <span>⏸ 暫停實時更新</span>
-        </button>
-        <button class="btn-primary" id="force-refresh">
-          <span class="icon">⚡</span>
-          <span>強制刷新所有幣種</span>
-        </button>
+      <div class="header-controls">
+        <button class="btn btn-secondary" id="toggle-pause">暫停</button>
+        <button class="btn btn-primary" id="force-refresh">立即掃描</button>
       </div>
     </header>
 
+    <div class="control-section">
+      <div class="control-group">
+        <label class="control-label">時間框架</label>
+        <select id="timeframe-select">
+          <option value="15m">15 分鐘</option>
+          <option value="1h">1 小時</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label class="control-label">檢測模式</label>
+        <select id="detection-mode">
+          <option value="all">所有信號</option>
+          <option value="bb-only">僅 BB 通道接觸</option>
+          <option value="high-confidence">高信心度 (>75%)</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <div class="checkbox-row">
+          <input type="checkbox" id="show-only-active" checked>
+          <label class="control-label">僅顯示有信號</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="show-debug" checked>
+          <label class="control-label">顯示調試信息</label>
+        </div>
+      </div>
+    </div>
+
     <main class="layout-main">
       <section class="panel">
-        <div class="panel-header">
-          <div class="panel-title">
-            <h2>選擇幣種</h2>
-            <span class="sub">22 個幣種 · 可擴展到 50+</span>
-          </div>
-          <span class="tag">每 5 秒購描一次</span>
-        </div>
-        <div class="sidebar-section">
-          <h3>全部幣種</h3>
-          <div class="selection-info">已選擇: <span class="count" id="selected-count">0</span> 個</div>
-          <div class="symbol-list" id="symbol-list"></div>
-        </div>
+        <h3 class="panel-title">選擇幣種 <span id="selected-count">(0)</span></h3>
+        <div class="symbol-list" id="symbol-list"></div>
       </section>
 
-      <section class="panel signals-panel">
-        <div class="panel-header">
-          <div class="panel-title">
-            <h2>實時信號流</h2>
-            <span class="sub">二層架構 · 避免 80% 不必計算 · 高質量信號</span>
-          </div>
-          <span class="tag">層級 2: 有效性驗證 (50–100ms)</span>
-        </div>
-        <div class="signals-toolbar">
-          <div class="filters-row">
-            <div class="chip quality-high active" data-filter-quality="excellent">
-              <span class="dot"></span>
-              <span>EXCELLENT</span>
-              <span class="key">&gt; 75%</span>
-            </div>
-            <div class="chip quality-med active" data-filter-quality="good">
-              <span class="dot"></span>
-              <span>GOOD</span>
-              <span class="key">65–75%</span>
-            </div>
-            <div class="chip quality-low" data-filter-quality="moderate">
-              <span class="dot"></span>
-              <span>MODERATE</span>
-              <span class="key">50–65%</span>
-            </div>
-            <div class="chip" data-filter-quality="weak">
-              <span class="dot" style="background:#f97316"></span>
-              <span>WEAK</span>
-            </div>
-            <div class="chip" data-filter-quality="poor">
-              <span class="dot" style="background:#ef4444"></span>
-              <span>POOR</span>
-            </div>
-          </div>
-          <div class="filters-row">
-            <div class="chip direction-long active" data-filter-direction="long">
-              <span class="dot"></span>
-              <span>LONG</span>
-            </div>
-            <div class="chip direction-short active" data-filter-direction="short">
-              <span class="dot"></span>
-              <span>SHORT</span>
-            </div>
-          </div>
-        </div>
-        <div class="signals-summary" id="signals-summary">
-          最近 1 分鐘: <strong>0</strong> 個信號 · <strong>0</strong> 個 EXCELLENT · <strong>0</strong> 個 GOOD
-        </div>
-        <div class="signals-table-wrapper">
-          <div class="signals-table-header">
-            <div>幣種 / 時間框架</div>
-            <div>方向</div>
-            <div>BB 觸及位置</div>
-            <div>有效性概率</div>
-            <div>品質</div>
-            <div>細節</div>
-          </div>
-          <div class="signals-table-body" id="signals-body"></div>
-        </div>
+      <section class="panel">
+        <h3 class="panel-title">實時信號</h3>
+        <div class="signals-grid" id="signals-grid"></div>
       </section>
 
-      <section class="panel overview-panel">
-        <div class="panel-header">
-          <div class="panel-title">
-            <h2>系統概覽</h2>
-            <span class="sub">企業級部署指標 · 即時健康檢查</span>
-          </div>
-          <span class="tag">企業級性能儀表板</span>
-        </div>
-        <div class="overview-grid">
-          <div class="metric-card alt">
-            <div class="metric-label">組合準確度 (22 幣種)</div>
-            <div class="metric-value">
-              <span class="main" id="metric-combined">95%</span>
-              <span class="suffix">(最近 24 小時)</span>
-            </div>
-            <div class="metric-tagline">位置模型 99% + 有效性模型 94.5% 綜合</div>
-            <div class="mini-chart-row">
-              <div class="mini-chart-label">EXCELLENT/GOOD 比例</div>
-              <div class="mini-chart-bar">
-                <div class="mini-chart-knob" id="knob-accuracy" style="left:76%"></div>
-              </div>
-            </div>
-            <div class="metric-footnote">false positive &lt; 10% · 專為 BB 反彈優化</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">資源使用 (5 幣基準)</div>
-            <div class="metric-value">
-              <span class="main" id="metric-cpu">16%</span>
-              <span class="suffix">CPU · <span id="metric-mem">380MB</span> RAM</span>
-            </div>
-            <div class="metric-tagline">二層架構避免 ~80% 不必計算</div>
-            <div class="mini-chart-row">
-              <div class="mini-chart-label">計算效率</div>
-              <div class="mini-chart-bar">
-                <div class="mini-chart-knob" id="knob-efficiency" style="left:82%"></div>
-              </div>
-            </div>
-            <div class="metric-footnote">延遲 &lt; 1 秒 · WebSocket 實時推送</div>
-          </div>
-        </div>
-        <div class="signal-quality-card">
-          <div class="quality-header">
-            <span class="label">信號品質分佈 (最近 100 個)</span>
-            <span class="value" id="quality-summary">EXCELLENT 42 · GOOD 31 · 其他 27</span>
-          </div>
-          <div class="quality-badges">
-            <div class="quality-badge excellent">
-              <span class="dot"></span>
-              <span>EXCELLENT</span>
-              <span>(&gt; 75%)</span>
-            </div>
-            <div class="quality-badge good">
-              <span class="dot"></span>
-              <span>GOOD</span>
-              <span>(65–75%)</span>
-            </div>
-            <div class="quality-badge moderate">
-              <span class="dot"></span>
-              <span>MODERATE</span>
-              <span>(50–65%)</span>
-            </div>
-            <div class="quality-badge weak">
-              <span class="dot"></span>
-              <span>WEAK</span>
-            </div>
-            <div class="quality-badge poor">
-              <span class="dot"></span>
-              <span>POOR</span>
-            </div>
-          </div>
-        </div>
-        <div class="signal-quality-card">
-          <div class="quality-header">
-            <span class="label">系統健康</span>
-            <span class="value">
-              <span class="health-dot"></span>
-              <span id="system-health-text">所有服務正常</span>
-            </span>
-          </div>
-          <div class="metric-footnote">
-            實時監控: WebSocket 連線 · 模型載入狀態 · 幣種資料流
-          </div>
+      <section class="panel">
+        <h3 class="panel-title">模型調試信息</h3>
+        <div class="debug-panel" id="debug-panel">
+          <div class="debug-line" style="color: #22c55e;">等待連接...</div>
         </div>
       </section>
     </main>
 
-    <footer class="footer">
-      <span>BB Bounce ML Realtime Detector V2 · <strong>企業級部署就緒</strong></span>
-      <div class="footer-links">
-        <a href="/QUICKSTART_V2.md" target="_blank" rel="noreferrer">QUICKSTART_V2.md</a>
-        <a href="/REALTIME_V2_INTEGRATION.md" target="_blank" rel="noreferrer">REALTIME_V2_INTEGRATION.md</a>
-        <a href="/SYSTEM_ARCHITECTURE_V2.md" target="_blank" rel="noreferrer">SYSTEM_ARCHITECTURE_V2.md</a>
-      </div>
+    <footer>
+      <span>BB Bounce ML Realtime Detector V2 | 企業級部署版本</span>
+      <span>運行狀態: <span id="status" style="color: #22c55e;">連接中</span></span>
     </footer>
   </div>
 
   <script>
     const socket = io();
+    const debugLines = [];
+    const maxDebugLines = 50;
 
     let paused = false;
-    let filterActiveOnly = false;  // 厚運下改成選擇制: 只顯示已選擇的幣種
-    let activeQualityFilters = new Set(["excellent", "good"]);
-    let activeDirectionFilters = new Set(["long", "short"]);
-    let selectedSymbols = new Set();  // 用戶已選擇的幣種
-
+    let selectedSymbols = new Set();
+    let allSymbols = [];
     let latestSignals = [];
-    let symbolsState = {};  // symbol -> state
-    let allSymbols = [];    // 所有 22 個幣種
+    let currentTimeframe = '15m';
+    let detectionMode = 'all';
+    let showOnlyActive = true;
+    let showDebug = true;
 
-    const symbolListEl = document.getElementById("symbol-list");
-    const signalsBodyEl = document.getElementById("signals-body");
-    const signalsSummaryEl = document.getElementById("signals-summary");
-    const selectedCountEl = document.getElementById("selected-count");
-    const systemHealthTextEl = document.getElementById("system-health-text");
+    const symbolListEl = document.getElementById('symbol-list');
+    const signalsGridEl = document.getElementById('signals-grid');
+    const debugPanelEl = document.getElementById('debug-panel');
+    const selectedCountEl = document.getElementById('selected-count');
+    const statusEl = document.getElementById('status');
 
-    function qualityLabel(prob) {
-      if (prob >= 0.75) return "excellent";
-      if (prob >= 0.65) return "good";
-      if (prob >= 0.5) return "moderate";
-      if (prob >= 0.3) return "weak";
-      return "poor";
+    function addDebugLine(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString('zh-TW');
+      debugLines.unshift(`[${timestamp}] ${message}`);
+      if (debugLines.length > maxDebugLines) debugLines.pop();
+      renderDebugPanel();
     }
 
-    function qualityDisplay(prob) {
-      if (prob >= 0.75) return "EXCELLENT";
-      if (prob >= 0.65) return "GOOD";
-      if (prob >= 0.5) return "MODERATE";
-      if (prob >= 0.3) return "WEAK";
-      return "POOR";
-    }
-
-    function sideDisplay(side) {
-      if (side === "long") return "Long";
-      if (side === "short") return "Short";
-      return side;
-    }
-
-    function formatTime(ts) {
-      try {
-        const d = new Date(ts);
-        if (isNaN(d.getTime())) return ts;
-        return d.toLocaleTimeString("zh-TW", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        });
-      } catch {
-        return ts;
+    function renderDebugPanel() {
+      if (!showDebug) {
+        debugPanelEl.innerHTML = '<div class="debug-line">調試信息已隱藏</div>';
+        return;
       }
+      debugPanelEl.innerHTML = debugLines
+        .map(line => `<div class="debug-line"><span class="debug-time">${line.substring(1, 13)}</span> ${line.substring(14)}</div>`)
+        .join('');
     }
 
     function renderSymbols() {
-      const entries = Object.entries(symbolsState)
-        .sort((a, b) => {
-          const aSignal = a[1].last_signal;
-          const bSignal = b[1].last_signal;
-          if (!aSignal && !bSignal) return a[0].localeCompare(b[0]);
-          if (!aSignal) return 1;
-          if (!bSignal) return -1;
-          return bSignal.timestamp - aSignal.timestamp;
-        });
-
-      symbolListEl.innerHTML = "";
-
-      for (const [symbol, state] of entries) {
-        const el = document.createElement("div");
-        el.className = "symbol-item" + (selectedSymbols.has(symbol) ? " selected" : "");
-
-        const base = document.createElement("div");
-        base.className = "symbol-main";
-
-        const row = document.createElement("div");
-        row.className = "symbol-name-row";
-
-        const nameSpan = document.createElement("span");
-        nameSpan.className = "symbol-name";
-        nameSpan.textContent = symbol;
-
-        const tfSpan = document.createElement("span");
-        tfSpan.className = "symbol-tf";
-        tfSpan.textContent = "15m";
-
-        const statusSpan = document.createElement("span");
-        statusSpan.className = "symbol-status " + (state.last_signal ? "has_signal" : "idle");
-        statusSpan.textContent = state.last_signal ? "信號" : "實時";
-
-        row.appendChild(nameSpan);
-        row.appendChild(tfSpan);
-        row.appendChild(statusSpan);
-
-        const meta = document.createElement("div");
-        meta.className = "symbol-meta";
-        if (state.last_signal) {
-          meta.textContent = `最後: ${formatTime(state.last_signal.timestamp)}`;
-        } else {
-          meta.textContent = "正實時掃描";
-        }
-
-        base.appendChild(row);
-        base.appendChild(meta);
-
-        const checkbox = document.createElement("div");
-        checkbox.className = "symbol-checkbox";
-
-        el.appendChild(base);
-        el.appendChild(checkbox);
-
-        el.addEventListener("click", () => {
-          const isSelected = selectedSymbols.has(symbol);
+      symbolListEl.innerHTML = '';
+      for (const symbol of allSymbols.sort()) {
+        const isSelected = selectedSymbols.has(symbol);
+        const el = document.createElement('div');
+        el.className = `symbol-item ${isSelected ? 'selected' : ''}`;
+        el.innerHTML = `
+          <div class="symbol-checkbox"></div>
+          <div class="symbol-name">${symbol}</div>
+          <div class="symbol-status">15m</div>
+        `;
+        el.addEventListener('click', () => {
           if (isSelected) {
             selectedSymbols.delete(symbol);
+            socket.emit('select_symbol', { symbol, selected: false });
           } else {
             selectedSymbols.add(symbol);
+            socket.emit('select_symbol', { symbol, selected: true });
           }
-
-          // 鑖生伺服勑器
-          socket.emit("select_symbol", {
-            symbol: symbol,
-            selected: !isSelected
-          });
-
           renderSymbols();
           renderSignals();
           updateSelectedCount();
+          addDebugLine(`✓ 幣種切換: ${symbol} (${isSelected ? '取消' : '選擇'})`);
         });
-
         symbolListEl.appendChild(el);
       }
     }
 
     function updateSelectedCount() {
-      selectedCountEl.textContent = selectedSymbols.size;
+      selectedCountEl.textContent = `(${selectedSymbols.size})`;
+    }
+
+    function filterSignals() {
+      let filtered = latestSignals;
+
+      if (selectedSymbols.size > 0) {
+        filtered = filtered.filter(s => selectedSymbols.has(s.symbol));
+      }
+
+      if (detectionMode === 'high-confidence') {
+        filtered = filtered.filter(s => (s.validity_prob || 0) >= 0.75);
+      }
+
+      return filtered.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     }
 
     function renderSignals() {
-      signalsBodyEl.innerHTML = "";
+      const signals = filterSignals();
+      signalsGridEl.innerHTML = '';
 
-      const now = Date.now();
-      // 篦濆迩新 1 分鐘轍䯊訊重且匹配已選擇的幣種
-      const lastMinuteSignals = latestSignals.filter(
-        (s) => now - s.timestamp <= 60_000 && selectedSymbols.has(s.symbol)
-      );
-      const excellentCount = lastMinuteSignals.filter(
-        (s) => (s.validity_prob || 0) >= 0.75
-      ).length;
-      const goodCount = lastMinuteSignals.filter(
-        (s) => (s.validity_prob || 0) >= 0.65 && (s.validity_prob || 0) < 0.75
-      ).length;
+      if (signals.length === 0) {
+        signalsGridEl.innerHTML = '<div style="color: var(--color-gray-300); text-align: center; padding: 20px;">無信號</div>';
+        return;
+      }
 
-      signalsSummaryEl.innerHTML = `最近 1 分鐘: <strong>${lastMinuteSignals.length}</strong> 個信號 · <strong>${excellentCount}</strong> 個 EXCELLENT · <strong>${goodCount}</strong> 個 GOOD`;
+      for (const signal of signals.slice(0, 20)) {
+        const prob = signal.validity_prob || 0;
+        const qualityClass = prob >= 0.75 ? 'quality-excellent' : prob >= 0.65 ? 'quality-good' : 'quality-moderate';
+        const sideClass = signal.side === 'long' ? 'signal-side-long' : 'signal-side-short';
+        const sideText = signal.side === 'long' ? '多頭 ↑' : '空頭 ↓';
 
-      for (const s of latestSignals) {
-        // 又寺下克層渀辞（麽: 選擇幣種せい課労それず)
-        if (!selectedSymbols.has(s.symbol)) continue;
-
-        const prob = s.validity_prob || 0;
-        const q = qualityLabel(prob);
-
-        if (!activeQualityFilters.has(q)) continue;
-        if (!activeDirectionFilters.has(s.side)) continue;
-
-        const row = document.createElement("div");
-        row.className = "signal-row";
-
-        const cellSymbol = document.createElement("div");
-        cellSymbol.className = "symbol";
-        cellSymbol.textContent = s.symbol + (s.timeframe ? ` · ${s.timeframe}` : "");
-
-        const cellSide = document.createElement("div");
-        cellSide.className = s.side === "long" ? "side-long" : "side-short";
-        cellSide.textContent = sideDisplay(s.side);
-
-        const cellBB = document.createElement("div");
-        cellBB.textContent = s.bb_position_label || "Middle";
-
-        const cellProb = document.createElement("div");
-        const probPill = document.createElement("div");
-        probPill.className = "score-pill";
-        const label = document.createElement("span");
-        label.className = "label";
-        label.textContent = "P(valid)";
-        const val = document.createElement("span");
-        val.className = "value";
-        val.textContent = `${Math.round(prob * 100)}%`;
-        probPill.appendChild(label);
-        probPill.appendChild(val);
-        cellProb.appendChild(probPill);
-
-        const cellQuality = document.createElement("div");
-        const qBadge = document.createElement("div");
-        qBadge.className = `badge-quality ${q}`;
-        qBadge.textContent = qualityDisplay(prob);
-        cellQuality.appendChild(qBadge);
-
-        const cellMeta = document.createElement("div");
-        const metaWrap = document.createElement("div");
-        metaWrap.className = "meta-chips";
-
-        const meta1 = document.createElement("div");
-        meta1.className = "meta-chip";
-        meta1.innerHTML = `<span class="key">RSI</span> ${(s.rsi ?? "-").toFixed(1)}`;
-
-        const meta2 = document.createElement("div");
-        meta2.className = "meta-chip";
-        meta2.innerHTML = `<span class="key">Vol</span> ${(s.vol_ratio ?? "-").toFixed(2)}`;
-
-        const meta3 = document.createElement("div");
-        meta3.className = "meta-chip";
-        meta3.innerHTML = `<span class="key">ADX</span> ${(s.adx ?? "-").toFixed(1)}`;
-
-        metaWrap.appendChild(meta1);
-        metaWrap.appendChild(meta2);
-        metaWrap.appendChild(meta3);
-        cellMeta.appendChild(metaWrap);
-
-        row.appendChild(cellSymbol);
-        row.appendChild(cellSide);
-        row.appendChild(cellBB);
-        row.appendChild(cellProb);
-        row.appendChild(cellQuality);
-        row.appendChild(cellMeta);
-
-        signalsBodyEl.appendChild(row);
+        const card = document.createElement('div');
+        card.className = 'signal-card';
+        card.innerHTML = `
+          <div class="signal-header">
+            <div>
+              <div class="signal-symbol">${signal.symbol}</div>
+              <div class="signal-time">${new Date(signal.timestamp).toLocaleTimeString('zh-TW')}</div>
+            </div>
+            <div class="${sideClass}" style="font-size: 14px;">${sideText}</div>
+          </div>
+          <div class="signal-stat">
+            <span class="signal-label">位置:</span>
+            <span class="signal-value">${signal.bb_position_label || 'Middle'}</span>
+          </div>
+          <div class="signal-stat">
+            <span class="signal-label">有效性:</span>
+            <span class="signal-value">${Math.round(prob * 100)}%</span>
+          </div>
+          <div class="signal-stat">
+            <span class="signal-label">品質:</span>
+            <span class="quality-badge ${qualityClass}">${prob >= 0.75 ? 'EXCELLENT' : prob >= 0.65 ? 'GOOD' : 'MODERATE'}</span>
+          </div>
+          <div class="signal-stat">
+            <span class="signal-label">RSI:</span>
+            <span class="signal-value">${(signal.rsi || 0).toFixed(1)}</span>
+          </div>
+          <div class="signal-stat">
+            <span class="signal-label">ADX:</span>
+            <span class="signal-value">${(signal.adx || 0).toFixed(1)}</span>
+          </div>
+        `;
+        signalsGridEl.appendChild(card);
       }
     }
 
-    socket.on("connect", () => {
-      systemHealthTextEl.textContent = "所有服務正常";
-      console.log("[socket] Connected");
-      socket.emit("request_symbol_list");  // 請求完整幣種列表
+    document.getElementById('timeframe-select').addEventListener('change', (e) => {
+      currentTimeframe = e.target.value;
+      addDebugLine(`⏱ 時間框架變更: ${e.target.value}`);
+      socket.emit('set_timeframe', { timeframe: currentTimeframe });
     });
 
-    socket.on("disconnect", () => {
-      systemHealthTextEl.textContent = "與後端連線中斷";
-    });
-
-    socket.on("symbol_list_response", (data) => {
-      console.log("[socket] Received symbol list:", data.symbols.length, "symbols");
-      allSymbols = data.symbols;
-      
-      // 初始化所有幣種狀態
-      for (const symbol of allSymbols) {
-        if (!symbolsState[symbol]) {
-          symbolsState[symbol] = {
-            symbol: symbol,
-            status: "idle",
-            last_signal: null
-          };
-        }
-        // 更新狀態
-        if (data.states && data.states[symbol]) {
-          symbolsState[symbol] = {
-            ...symbolsState[symbol],
-            ...data.states[symbol]
-          };
-        }
-      }
-      
-      renderSymbols();
-    });
-
-    socket.on("symbols_state_update", (states) => {
-      // 同步更新所有幣種狀態
-      for (const [symbol, state] of Object.entries(states)) {
-        if (symbolsState[symbol]) {
-          symbolsState[symbol] = {
-            ...symbolsState[symbol],
-            ...state
-          };
-        }
-      }
-      renderSymbols();
-    });
-
-    socket.on("realtime_signal", (payload) => {
-      if (paused) return;
-
-      const ts = Date.now();
-      const normalized = {
-        symbol: payload.symbol || "UNKNOWN",
-        timeframe: payload.timeframe || "15m",
-        side: (payload.side || "long").toLowerCase(),
-        validity_prob: payload.validity_prob || 0,
-        bb_position_label: payload.bb_position_label || "Middle",
-        rsi: payload.rsi,
-        adx: payload.adx,
-        vol_ratio: payload.vol_ratio,
-        timestamp: payload.timestamp || ts,
-      };
-
-      // 更新所有幣種的 last_signal
-      if (symbolsState[normalized.symbol]) {
-        symbolsState[normalized.symbol].last_signal = normalized;
-      }
-
-      latestSignals.unshift(normalized);
-      latestSignals = latestSignals.filter((s) => ts - s.timestamp <= 5 * 60_000);
-
-      renderSymbols();
+    document.getElementById('detection-mode').addEventListener('change', (e) => {
+      detectionMode = e.target.value;
+      addDebugLine(`🔍 檢測模式: ${e.target.value}`);
       renderSignals();
     });
 
-    document.getElementById("toggle-pause").addEventListener("click", () => {
+    document.getElementById('show-only-active').addEventListener('change', (e) => {
+      showOnlyActive = e.target.checked;
+      addDebugLine(`👁 只顯示活躍幣種: ${e.target.checked ? '開' : '關'}`);
+      renderSignals();
+    });
+
+    document.getElementById('show-debug').addEventListener('change', (e) => {
+      showDebug = e.target.checked;
+      addDebugLine(`🐛 調試信息: ${e.target.checked ? '顯示' : '隱藏'}`);
+      renderDebugPanel();
+    });
+
+    document.getElementById('toggle-pause').addEventListener('click', () => {
       paused = !paused;
-      const btn = document.getElementById("toggle-pause");
-      if (paused) {
-        btn.innerHTML = "<span>\u25b6 恢復實時更新</span>";
-      } else {
-        btn.innerHTML = "<span>\u23f8 暫停實時更新</span>";
-      }
+      const btn = document.getElementById('toggle-pause');
+      btn.textContent = paused ? '恢復' : '暫停';
+      addDebugLine(`${paused ? '⏸' : '▶'} 實時更新${paused ? '已暫停' : '已恢復'}`);
     });
 
-    document.getElementById("force-refresh").addEventListener("click", () => {
-      socket.emit("force_refresh", {});
+    document.getElementById('force-refresh').addEventListener('click', () => {
+      socket.emit('force_refresh', {});
+      addDebugLine('⚡ 强制刷新所有幣種');
     });
 
-    document.querySelectorAll(".chip[data-filter-quality]").forEach((chip) => {
-      chip.addEventListener("click", () => {
-        const q = chip.getAttribute("data-filter-quality");
-        if (activeQualityFilters.has(q)) {
-          activeQualityFilters.delete(q);
-          chip.classList.remove("active");
-        } else {
-          activeQualityFilters.add(q);
-          chip.classList.add("active");
-        }
-        renderSignals();
-      });
+    socket.on('connect', () => {
+      statusEl.textContent = '已連接';
+      statusEl.style.color = '#22c55e';
+      addDebugLine('✓ WebSocket 連接成功');
+      socket.emit('request_symbol_list');
     });
 
-    document.querySelectorAll(".chip[data-filter-direction]").forEach((chip) => {
-      chip.addEventListener("click", () => {
-        const d = chip.getAttribute("data-filter-direction");
-        if (activeDirectionFilters.has(d)) {
-          activeDirectionFilters.delete(d);
-          chip.classList.remove("active");
-        } else {
-          activeDirectionFilters.add(d);
-          chip.classList.add("active");
-        }
-        renderSignals();
-      });
+    socket.on('disconnect', () => {
+      statusEl.textContent = '已斷開';
+      statusEl.style.color = '#ef4444';
+      addDebugLine('✗ WebSocket 連接已斷開');
     });
+
+    socket.on('symbol_list_response', (data) => {
+      allSymbols = data.symbols || [];
+      addDebugLine(`📊 已加載 ${allSymbols.length} 個幣種`);
+      renderSymbols();
+    });
+
+    socket.on('realtime_signal', (payload) => {
+      if (paused) return;
+
+      const signal = {
+        symbol: payload.symbol,
+        timeframe: payload.timeframe || '15m',
+        side: (payload.side || 'long').toLowerCase(),
+        validity_prob: payload.validity_prob || 0,
+        bb_position_label: payload.bb_position_label || 'Middle',
+        rsi: payload.rsi,
+        adx: payload.adx,
+        vol_ratio: payload.vol_ratio,
+        timestamp: payload.timestamp || Date.now(),
+      };
+
+      latestSignals.unshift(signal);
+      latestSignals = latestSignals.slice(0, 100);
+
+      renderSignals();
+      addDebugLine(`📈 新信號: ${signal.symbol} ${signal.side.toUpperCase()} @ ${Math.round(signal.validity_prob * 100)}%`);
+    });
+
+    // 初始化
+    addDebugLine('🚀 應用啟動成功');
+    addDebugLine('模型配置:');
+    addDebugLine('  • 波動大小分類器');
+    addDebugLine('  • BB 通道上下軌分類器');
+    addDebugLine('  • 有效性驗證模型');
   </script>
 </body>
 </html>
