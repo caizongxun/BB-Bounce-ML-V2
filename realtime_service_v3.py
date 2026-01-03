@@ -13,6 +13,7 @@ BB反彈ML系統 - 實時服務 V3 (修載第十輫修載+接近提示)
 8. 波動性預測整合到信號生成邏輫
 9. 接近 BB 纱線提示功能
 10. 修謇：即使未觸厬也要返回接近信息
+11. 修載：確保返回完整的 current_high/current_low 用於前端接近提示計算
 """
 
 import os
@@ -854,7 +855,7 @@ def predict():
             return jsonify({
                 'symbol': symbol,
                 'timeframe': timeframe,
-                'bb_touch': {'touched': False, 'approach': {'approaching': False, 'direction': None, 'distance_ratio': 1.0, 'warning_level': 'none'}},
+                'bb_touch': {'touched': False, 'approach': {'approaching': False, 'direction': None, 'distance_ratio': 1.0, 'warning_level': 'none'}, 'current_high': 0, 'current_low': 0},
                 'validity': None,
                 'volatility': None,
                 'signal': 'NEUTRAL'
