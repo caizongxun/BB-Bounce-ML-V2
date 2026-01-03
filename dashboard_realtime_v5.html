@@ -229,7 +229,6 @@
             word-break: break-all;
         }
 
-        /* 接近程度段 - 無動畫 */
         .approaching-section {
             background: rgba(30, 30, 30, 0.6);
             border: 3px solid #00bcd4;
@@ -369,7 +368,6 @@
             background: linear-gradient(90deg, #4caf50, #81c784);
         }
 
-        /* 模型預測結果 - 無動畫 */
         .model-results {
             background: rgba(30, 30, 30, 0.6);
             border: 2px solid #00bcd4;
@@ -484,7 +482,6 @@
             color: #ef5350;
         }
 
-        /* 所有幣種網格 */
         .symbols-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -634,7 +631,6 @@
             color: #e0e0e0;
         }
 
-        /* 診斷控制台 */
         .debug-panel {
             background: rgba(20, 20, 20, 0.8);
             border: 1px solid rgba(255, 193, 7, 0.3);
@@ -726,10 +722,13 @@
             <div class="status-info">
                 <div class="status-item">
                     <div class="status-dot"></div>
-                    <span>API 連接: <span id="api-status">就緒</span></span>
+                    <span>API 連接: <span id="api-status">就緘</span></span>
                 </div>
                 <div class="status-item">
                     <span id="last-update">最後更新: --:--:--</span>
+                </div>
+                <div class="status-item">
+                    <span id="update-interval">更新間隔: --秒</span>
                 </div>
             </div>
         </div>
@@ -758,7 +757,7 @@
                             <option value="DOGEUSDT">狗狗幣 (DOGEUSDT)</option>
                             <option value="SOLUSDT">索拉納 (SOLUSDT)</option>
                             <option value="LTCUSDT">萊特幣 (LTCUSDT)</option>
-                            <option value="AVAXUSDT">雪崩 (AVAXUSDT)</option>
+                            <option value="AVAXUSDT">雪崧 (AVAXUSDT)</option>
                             <option value="LINKUSDT">鏈環 (LINKUSDT)</option>
                             <option value="UNIUSDT">Uniswap (UNIUSDT)</option>
                             <option value="ATOMUSDT">Cosmos (ATOMUSDT)</option>
@@ -784,14 +783,14 @@
                     </div>
 
                     <div class="button-group">
-                        <button class="btn btn-primary" onclick="updateDetailedAnalysis()">分析</button>
+                        <button class="btn btn-primary" onclick="updateDetailedAnalysis()">開始分析</button>
                     </div>
                 </div>
 
                 <div class="detail-panel" id="detail-content">
                     <div class="empty-state">
                         <div class="empty-state-title">提示</div>
-                        <p>選擇交易對和時間週期後點擊「分析」開始</p>
+                        <p>選擇交易對和時間週期後點擊「開始分析」，來開始實時自動更新（每 10 秒）</p>
                     </div>
                 </div>
             </div>
@@ -801,7 +800,7 @@
         <div class="tab-content">
             <div class="detail-section">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
-                    <h2 style="color: #00bcd4;">實時監控面板 (每 5 秒更新)</h2>
+                    <h2 style="color: #00bcd4;">實時監控面板 (每 10 秒更新)</h2>
                     <button class="btn-primary" style="padding: 8px 16px; border: none; background: linear-gradient(135deg, #00bcd4, #4dd0e1); color: #0f0f0f; border-radius: 6px; cursor: pointer;" onclick="updateAllSymbols()">手動刷新</button>
                 </div>
 
@@ -829,6 +828,7 @@
     <script>
         const API_BASE = 'http://localhost:5000';
         const BINANCE_API = 'https://api.binance.com/api/v3';
+        const UPDATE_INTERVAL = 10000; // 10 秒
         const SYMBOLS = [
             'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT',
             'SOLUSDT', 'LTCUSDT', 'AVAXUSDT', 'LINKUSDT', 'UNIUSDT', 'ATOMUSDT',
@@ -839,7 +839,8 @@
         let debugLogs = [];
         let detailInterval = null;
         let allSymbolsInterval = null;
-        let currentDetailConfig = null; // 詳細分析設置
+        let currentDetailConfig = null;
+        let currentTab = 0;
 
         // 診斷日誌
         function addDebugLog(message, type = 'info') {
@@ -886,17 +887,26 @@
         }
 
         function switchTab(tabIndex) {
+            currentTab = tabIndex;
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
             
             document.querySelectorAll('.tab-content')[tabIndex].classList.add('active');
             document.querySelectorAll('.tab-button')[tabIndex].classList.add('active');
 
+            // 止止舀事並後日後日长配置
+            if (detailInterval) clearInterval(detailInterval);
+            if (allSymbolsInterval) clearInterval(allSymbolsInterval);
+
             if (tabIndex === 0) {
-                stopAllSymbolsUpdate();
-                startDetailUpdate();
+                // 詳細分析模式
+                addDebugLog('[事件] 切換到詳細分析模式', 'info');
+                if (currentDetailConfig) {
+                    startDetailUpdate();
+                }
             } else {
-                stopDetailUpdate();
+                // 實時監控模式
+                addDebugLog('[事件] 切換到實時監控模式', 'info');
                 updateAllSymbols();
                 startAllSymbolsUpdate();
             }
@@ -961,9 +971,9 @@
             const distance = bb.distance_percent || 0;
             const warning = bb.warning_level || 'none';
 
-            // 判別邏輯: 距離 <= 0.2% 或 warning === 'danger' 是危險
+            // 判別邏輯: 距離 <= 0.05% 或 warning === 'danger' 是危險
             let sectionClass = 'safe';
-            if (warning === 'danger' || distance <= 0.2) {
+            if (warning === 'danger' || distance <= 0.05) {
                 sectionClass = 'danger';
             } else if (warning === 'warning' || warning === 'caution') {
                 sectionClass = 'warning';
@@ -971,7 +981,7 @@
 
             let statusText = '正常';
             let directionText = '——';
-            if (status === 'touched' || distance <= 0.2) {
+            if (status === 'touched' || distance <= 0.05) {
                 statusText = '觸及邊界';
                 directionText = direction === 'upper' ? '上軌' : '下軌';
                 sectionClass = 'danger';
@@ -1007,13 +1017,13 @@
                                 </div>
                             </div>
                             <div class="approaching-label" style="margin-top: 12px;">風險計算</div>
-                            <div class="approaching-value" style="font-size: 14px;">${distance <= 0.2 ? '危險等級 - 已接近邊界' : warningTextMap[warning]}</div>
+                            <div class="approaching-value" style="font-size: 14px;">${distance <= 0.05 ? '危險等級 - 已接近邊界' : warningTextMap[warning]}</div>
                         </div>
                     </div>
                 </div>
             `;
 
-            // 模型預測結果 - 動態更新
+            // 模型預測結果
             let modelHTML = '';
             const validity = data.validity;
             const volatility = data.volatility;
@@ -1024,8 +1034,8 @@
                     <div class="model-grid">
             `;
 
-            // 有效性卡片 - 改改改：古點伏特股活断方式侟避警詚表不一致
-            if (validity && (status === 'approaching' || status === 'touched' || distance <= 0.2)) {
+            // 有效性卡片
+            if (validity && (status === 'approaching' || status === 'touched' || distance <= 0.05)) {
                 const qualityClass = `quality-${validity.quality}`;
                 modelHTML += `
                     <div class="model-card validity">
@@ -1053,7 +1063,7 @@
             }
 
             // 波動性卡片
-            if (volatility && (status === 'approaching' || status === 'touched' || distance <= 0.2)) {
+            if (volatility && (status === 'approaching' || status === 'touched' || distance <= 0.05)) {
                 modelHTML += `
                     <div class="model-card volatility">
                         <div class="model-card-title">未來波動性</div>
@@ -1167,7 +1177,7 @@
             let statusText = '正常';
             let isCritical = false;
             
-            if (warning === 'danger' || distance <= 0.2) {
+            if (warning === 'danger' || distance <= 0.05) {
                 cardClass += ' danger';
                 statusText = '危險';
                 isCritical = true;
@@ -1235,40 +1245,41 @@
 
         function startDetailUpdate() {
             if (detailInterval) clearInterval(detailInterval);
-            // 立即執行一次，然後每 5 秒更新
+            addDebugLog('[詳細] 開始 10 秒自動更新模式', 'success');
+            // 立即執行一次，然後每 10 秒更新
             if (currentDetailConfig) {
                 updateDetailedAnalysis();
             }
             detailInterval = setInterval(() => {
-                if (currentDetailConfig) {
+                if (currentDetailConfig && currentTab === 0) {
                     updateDetailedAnalysis();
                 }
-            }, 5000);
-        }
-
-        function stopDetailUpdate() {
-            if (detailInterval) clearInterval(detailInterval);
+            }, UPDATE_INTERVAL);
         }
 
         function startAllSymbolsUpdate() {
             if (allSymbolsInterval) clearInterval(allSymbolsInterval);
+            addDebugLog('[實時] 開始 10 秒自動更新模式', 'success');
             updateAllSymbols();
             allSymbolsInterval = setInterval(() => {
-                updateAllSymbols();
-            }, 5000);
-        }
-
-        function stopAllSymbolsUpdate() {
-            if (allSymbolsInterval) clearInterval(allSymbolsInterval);
+                if (currentTab === 1) {
+                    updateAllSymbols();
+                }
+            }, UPDATE_INTERVAL);
         }
 
         window.addEventListener('load', () => {
-            addDebugLog('[系統] 正慧時監控系統已啟動', 'success');
+            addDebugLog('[系統] BB 反彈實時監控系統 V5 已啟動', 'success');
+            // 預伫加載實時監控
+            if (currentTab === 1) {
+                updateAllSymbols();
+                startAllSymbolsUpdate();
+            }
         });
 
         window.addEventListener('unload', () => {
-            stopDetailUpdate();
-            stopAllSymbolsUpdate();
+            if (detailInterval) clearInterval(detailInterval);
+            if (allSymbolsInterval) clearInterval(allSymbolsInterval);
         });
     </script>
 </body>
