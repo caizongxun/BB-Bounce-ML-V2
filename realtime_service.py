@@ -1,16 +1,20 @@
-from flask import Flask, render_template, send_from_directory
-from flask_socketio import SocketIO, emit, rooms
+from flask import Flask, render_template
+from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 import threading
 import time
-import json
 from datetime import datetime
 from realtime_detector_v2 import RealtimeBBDetectorV2
+import logging
 
 app = Flask(__name__, template_folder="templates")
 app.config["SECRET_KEY"] = "your_secret_key_here"
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+# 配置日誌
+logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
+logger = logging.getLogger(__name__)
 
 # 初始化二層檢測器 V2
 bb_detector_v2 = RealtimeBBDetectorV2(
@@ -27,43 +31,20 @@ bb_detector_v2 = RealtimeBBDetectorV2(
 
 # 全域狀態
 scan_active = True
-last_signals = {}  # symbol -> last signal
-symbol_states = {}  # symbol -> state (for UI list)
+last_signals = {}
 user_selected_symbols = {}  # sid -> set of selected symbols
+user_timeframes = {}  # sid -> current timeframe
+user_detection_modes = {}  # sid -> detection mode
 
 
 def fetch_latest_candles(symbols, timeframe="15m"):
     """
     從交易所 API 取得最新 K 線
-    
-    注意: 這是假實現,請根據你的實際數據源 (Binance, 本機DB等) 修改
-    返回格式: {symbol: [candles]}
-    
-    candle 格式:
-    {
-        "timestamp": 1735880000000,
-        "open": 42500.0,
-        "high": 42800.0,
-        "low": 42200.0,
-        "close": 42600.0,
-        "volume": 120.5,
-        "bb_upper": 43000.0,
-        "bb_middle": 42500.0,
-        "bb_lower": 42000.0,
-        "rsi": 68.5,
-        "adx": 24.1,
-        "atr": 400.0
-    }
+    注意: 這是假實現，請根據你的實際數據源 (Binance, 本機DB等) 修改
     """
-    # TODO: 替換為實際數據源
-    # 例如:
-    # from binance_connector import spot_client
-    # 或從本機資料庫讀取
-    
     candles_dict = {}
     for symbol in symbols:
         candles_dict[symbol] = []
-    
     return candles_dict
 
 
@@ -78,11 +59,11 @@ def realtime_scan_loop():
     4. 推送信號到前端 (WebSocket)
     5. 更新所有幣種狀態
     """
-    print("[realtime_scan_loop] Started (5-second interval)...")
+    logger.info("[realtime_scan_loop] Started (5-second interval)...")
     
     while scan_active:
         try:
-            # 1. 取得最新 K 線 (實現自己的數據源)
+            # 1. 取得最新 K 線
             latest_candles = fetch_latest_candles(
                 symbols=bb_detector_v2.symbols,
                 timeframe="15m"
@@ -91,7 +72,6 @@ def realtime_scan_loop():
             # 2. 加入檢測器緩衝區
             for symbol, candles in latest_candles.items():
                 if len(candles) > 0:
-                    # 加入最新 K 線
                     for candle in candles:
                         bb_detector_v2.add_candle(symbol, candle)
             
@@ -103,30 +83,27 @@ def realtime_scan_loop():
                 symbol = signal["symbol"]
                 last_signals[symbol] = signal
                 
-                # 廣播信號給所有連接的客戶端
-                # 注意: 在背景執行緒中需要使用應用上下文
+                # 廣播信號給所有客戶端
                 socketio.emit(
                     "realtime_signal",
                     signal,
-                    to=None  # to=None 表示廣播給所有客戶端
+                    to=None
                 )
                 
-                print(f"[signal] {symbol} {signal['side']} @ {signal['validity_prob']:.2%}")
+                logger.info(f"[signal] {symbol} {signal['side'].upper()} @ {signal['validity_prob']:.1%} confidence")
             
             # 5. 更新所有幣種狀態
             symbol_states = bb_detector_v2.get_all_symbols_state()
-            
-            # 廣播所有幣種狀態更新給前端
             socketio.emit(
                 "symbols_state_update",
                 symbol_states,
                 to=None
             )
             
-            time.sleep(5.0)  # 每 5 秒掃描一次
+            time.sleep(5.0)
         
         except Exception as e:
-            print(f"[realtime_scan_loop] Error: {e}")
+            logger.error(f"[realtime_scan_loop] Error: {e}")
             import traceback
             traceback.print_exc()
             time.sleep(5.0)
@@ -141,13 +118,11 @@ def index():
 
 @app.route("/detector")
 def detector_dashboard():
-    """提供實時儀表板"""
     return render_template("realtime_dashboard_v2.html")
 
 
 @app.route("/api/symbols")
 def api_symbols():
-    """取得所有監控幣種列表"""
     return {
         "symbols": bb_detector_v2.symbols,
         "count": len(bb_detector_v2.symbols)
@@ -156,19 +131,16 @@ def api_symbols():
 
 @app.route("/api/symbols/state")
 def api_symbols_state():
-    """取得所有幣種狀態 (用於初始化左側列表)"""
     return bb_detector_v2.get_all_symbols_state()
 
 
 @app.route("/api/signals/latest")
 def api_signals_latest():
-    """取得最新信號"""
     return {"signals": list(last_signals.values())}
 
 
 @app.route("/api/symbol/<symbol>")
 def api_symbol_state(symbol):
-    """取得指定幣種狀態"""
     state = bb_detector_v2.get_symbol_state(symbol)
     return state
 
@@ -179,16 +151,22 @@ def api_symbol_state(symbol):
 def handle_connect():
     from flask import request
     sid = request.sid
-    print(f"[socket] Client connected: {sid}")
+    logger.info(f"[socket] Client connected: {sid}")
     
-    # 初始化該用戶的選中幣種集合
+    # 初始化該用戶的狀態
     user_selected_symbols[sid] = set()
+    user_timeframes[sid] = "15m"
+    user_detection_modes[sid] = "all"
     
-    # 連接時推送所有幣種列表
     emit("connection_response", {
         "status": "connected",
         "symbols": bb_detector_v2.symbols,
-        "count": len(bb_detector_v2.symbols)
+        "count": len(bb_detector_v2.symbols),
+        "available_models": [
+            "volatility_classifier",
+            "bb_band_classifier", 
+            "validity_validator"
+        ]
     })
 
 
@@ -196,19 +174,20 @@ def handle_connect():
 def handle_disconnect():
     from flask import request
     sid = request.sid
-    print(f"[socket] Client disconnected: {sid}")
+    logger.info(f"[socket] Client disconnected: {sid}")
     
-    # 清理該用戶的選中幣種
+    # 清理該用戶的狀態
     if sid in user_selected_symbols:
         del user_selected_symbols[sid]
+    if sid in user_timeframes:
+        del user_timeframes[sid]
+    if sid in user_detection_modes:
+        del user_detection_modes[sid]
 
 
 @socketio.on("request_symbol_list")
 def handle_request_symbol_list():
-    """
-    前端請求完整幣種列表 (包括所有 22 個幣種)
-    用於初始化左側監控幣種列表
-    """
+    logger.info("[socket] Request symbol list")
     all_states = bb_detector_v2.get_all_symbols_state()
     emit("symbol_list_response", {
         "symbols": bb_detector_v2.symbols,
@@ -219,15 +198,6 @@ def handle_request_symbol_list():
 
 @socketio.on("select_symbol")
 def handle_select_symbol(data):
-    """
-    前端選擇/取消選擇幣種
-    
-    前端發送:
-    {
-        "symbol": "BTCUSDT",
-        "selected": true/false
-    }
-    """
     from flask import request
     sid = request.sid
     symbol = data.get("symbol")
@@ -238,15 +208,12 @@ def handle_select_symbol(data):
         return
     
     if selected:
-        # 添加到選中集合
         user_selected_symbols[sid].add(symbol)
-        print(f"[select_symbol] {sid} selected {symbol}")
+        logger.info(f"[select_symbol] {sid} selected {symbol}")
     else:
-        # 從選中集合移除
         user_selected_symbols[sid].discard(symbol)
-        print(f"[select_symbol] {sid} deselected {symbol}")
+        logger.info(f"[select_symbol] {sid} deselected {symbol}")
     
-    # 回傳確認
     emit("selection_updated", {
         "symbol": symbol,
         "selected": selected,
@@ -254,30 +221,60 @@ def handle_select_symbol(data):
     })
 
 
+@socketio.on("set_timeframe")
+def handle_set_timeframe(data):
+    from flask import request
+    sid = request.sid
+    timeframe = data.get("timeframe", "15m")
+    
+    if timeframe not in ["15m", "1h"]:
+        emit("error", {"message": f"Invalid timeframe: {timeframe}"})
+        return
+    
+    user_timeframes[sid] = timeframe
+    logger.info(f"[set_timeframe] {sid} set to {timeframe}")
+    
+    emit("timeframe_updated", {
+        "timeframe": timeframe,
+        "message": f"時間框架已更新為 {timeframe}"
+    })
+
+
+@socketio.on("set_detection_mode")
+def handle_set_detection_mode(data):
+    from flask import request
+    sid = request.sid
+    mode = data.get("mode", "all")
+    
+    valid_modes = ["all", "bb-only", "high-confidence"]
+    if mode not in valid_modes:
+        emit("error", {"message": f"Invalid detection mode: {mode}"})
+        return
+    
+    user_detection_modes[sid] = mode
+    logger.info(f"[set_detection_mode] {sid} set to {mode}")
+    
+    emit("detection_mode_updated", {
+        "mode": mode,
+        "message": f"檢測模式已更新為 {mode}"
+    })
+
+
 @socketio.on("force_refresh")
 def handle_force_refresh(data):
-    """
-    前端點擊『強制刷新所有幣種』時觸發
-    
-    強制重新掃描所有幣種一次
-    """
-    print("[force_refresh] Triggering full scan...")
+    logger.info("[force_refresh] Triggering full scan...")
     try:
-        # 執行完整掃描
         signals = bb_detector_v2.scan_all(timeframe="15m")
         
-        # 推送所有信號
         for signal in signals:
             last_signals[signal["symbol"]] = signal
             socketio.emit("realtime_signal", signal, to=None)
         
-        # 推送所有幣種狀態
         all_states = bb_detector_v2.get_all_symbols_state()
         socketio.emit("symbols_state_update", all_states, to=None)
         
-        print(f"[force_refresh] Found {len(signals)} signals")
+        logger.info(f"[force_refresh] Found {len(signals)} signals")
         
-        # 回傳確認
         emit("force_refresh_response", {
             "status": "success",
             "signals_found": len(signals),
@@ -285,42 +282,31 @@ def handle_force_refresh(data):
         })
     
     except Exception as e:
-        print(f"[force_refresh] Error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"[force_refresh] Error: {e}")
         emit("force_refresh_response", {
             "status": "error",
             "error": str(e)
         })
 
 
-@socketio.on("get_symbol_state")
-def handle_get_symbol_state(data):
-    """
-    前端點擊左側幣種時觸發
-    取得該幣種的詳細狀態
-    """
-    symbol = data.get("symbol")
-    if symbol:
-        state = bb_detector_v2.get_symbol_state(symbol)
-        emit("symbol_state", {"symbol": symbol, "state": state})
-
-
 # ========== 應用啟動 ==========
 
 if __name__ == "__main__":
-    print("\n" + "="*60)
+    print("\n" + "="*70)
     print("BB Bounce ML Realtime Detector V2 - Service")
-    print("="*60)
+    print("="*70)
     print(f"Monitoring {len(bb_detector_v2.symbols)} symbols")
     print(f"Scan interval: 5 seconds")
-    print(f"Two-layer detection: Classifier (Layer 1) + Validity (Layer 2)")
-    print("="*60 + "\n")
+    print(f"Available detection models:")
+    print(f"  • Volatility Classifier (波動大小分類)")
+    print(f"  • BB Band Classifier (上下軌分類)")
+    print(f"  • Validity Validator (有效性驗證)")
+    print("="*70 + "\n")
     
     # 啟動背景掃描 loop
     scan_thread = threading.Thread(target=realtime_scan_loop, daemon=True)
     scan_thread.start()
-    print("[main] Background scan thread started (5s interval)\n")
+    logger.info("[main] Background scan thread started (5s interval)")
     
     # 啟動 Flask + SocketIO 服務
     try:
@@ -332,5 +318,5 @@ if __name__ == "__main__":
             use_reloader=False
         )
     except KeyboardInterrupt:
-        print("\n[main] Shutting down...")
+        logger.info("[main] Shutting down...")
         scan_active = False
