@@ -13,7 +13,7 @@ BB反彈ML系統 - 實時服務 V3 (修載第十輫修載+接近提示)
 8. 波動性預測整合到信號生成邏輫
 9. 接近 BB 纱線提示功能
 10. 修謇：即使未觸厬也要返回接近信息
-11. 修載：確保返回完整的 current_high/current_low 用於前端接近提示計算
+11. 修載：使用 lookback 20 根 K 棒計算最高/最低點，而非只用當下 K 棒
 """
 
 import os
@@ -131,6 +131,20 @@ class RealTimeFeatureExtractor:
         if key not in self.history or len(self.history[key]) == 0:
             return None
         return np.array([d.get('close', 0) for d in list(self.history[key])])
+    
+    def _get_high_prices(self, symbol, timeframe):
+        """修載：提取所有歷史高點"""
+        key = (symbol, timeframe)
+        if key not in self.history or len(self.history[key]) == 0:
+            return None
+        return np.array([d.get('high', 0) for d in list(self.history[key])])
+    
+    def _get_low_prices(self, symbol, timeframe):
+        """修載：提取所有歷史低點"""
+        key = (symbol, timeframe)
+        if key not in self.history or len(self.history[key]) == 0:
+            return None
+        return np.array([d.get('low', 0) for d in list(self.history[key])])
     
     def _calculate_bb(self, symbol, timeframe):
         closes = self._get_close_prices(symbol, timeframe)
@@ -260,6 +274,23 @@ class RealTimeFeatureExtractor:
             'middle': float(sma),
             'lower': float(lower)
         }
+    
+    def get_lookback_highs_lows(self, symbol, timeframe, lookback=20):
+        """修載：獲取過去 N 根 K 棒的最高點和最低點"""
+        highs = self._get_high_prices(symbol, timeframe)
+        lows = self._get_low_prices(symbol, timeframe)
+        
+        if highs is None or lows is None or len(highs) < lookback:
+            return None, None
+        
+        # 取過去 lookback 根 K 棒
+        lookback_highs = highs[-lookback:]
+        lookback_lows = lows[-lookback:]
+        
+        max_high = np.max(lookback_highs)
+        min_low = np.min(lookback_lows)
+        
+        return float(max_high), float(min_low)
 
 # ============================================================
 # 波動性特徵提取 (修載版本 - 15 個特徵)
@@ -611,15 +642,20 @@ class ModelManager:
     def calculate_bb_approach(self, symbol, timeframe, ohlcv_data):
         """
         計算接近 BB 纱線的程度
+        修載：使用 lookback 20 根 K 棒的最高點和最低點
         詮值：-1 (這是下軌) ~ 1 (這是上軌)
         """
         bb_values = self.bb_feature_extractor.get_bb_values(symbol, timeframe)
         if not bb_values:
             return {'approaching': False, 'direction': None, 'distance_ratio': 1.0, 'warning_level': 'none'}
         
-        current_high = ohlcv_data.get('high', 0)
-        current_low = ohlcv_data.get('low', 0)
-        current_close = ohlcv_data.get('close', 0)
+        # 修載：使用過去 20 根 K 棒的高低點
+        lookback_high, lookback_low = self.bb_feature_extractor.get_lookback_highs_lows(symbol, timeframe, lookback=20)
+        
+        if lookback_high is None or lookback_low is None:
+            # fallback 到當下 K 棒
+            lookback_high = ohlcv_data.get('high', 0)
+            lookback_low = ohlcv_data.get('low', 0)
         
         bb_upper = bb_values['upper']
         bb_lower = bb_values['lower']
@@ -627,10 +663,10 @@ class ModelManager:
         bb_range = bb_upper - bb_lower
         
         # 計算到上軌的距離（百位數）
-        dist_to_upper = (bb_upper - current_high) / (current_high + 1e-8) if current_high > 0 else 1.0
+        dist_to_upper = (bb_upper - lookback_high) / (lookback_high + 1e-8) if lookback_high > 0 else 1.0
         
         # 計算到下軌的距離（百位數）
-        dist_to_lower = (current_low - bb_lower) / (current_low + 1e-8) if current_low > 0 else 1.0
+        dist_to_lower = (lookback_low - bb_lower) / (lookback_low + 1e-8) if lookback_low > 0 else 1.0
         
         # 判斷接近方向
         approaching = False
@@ -719,7 +755,7 @@ class ModelManager:
         
         logger.debug(f'{symbol} {timeframe}: H={current_high:.2f}, L={current_low:.2f}, Upper={bb_upper:.2f}, Lower={bb_lower:.2f} -> Touch={touched} ({touch_type})')
         
-        # 計算接近情況
+        # 計算接近情況（修載：使用 lookback 20 根 K 棒）
         approach_info = self.calculate_bb_approach(symbol, timeframe, ohlcv_data)
         
         return {
