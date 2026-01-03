@@ -7,6 +7,7 @@ from datetime import datetime
 from realtime_detector_v2 import RealtimeBBDetectorV2
 from data_fetcher import DataFetcher
 import logging
+import os
 
 app = Flask(__name__, template_folder="templates")
 app.config["SECRET_KEY"] = "your_secret_key_here"
@@ -18,7 +19,6 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
 logger = logging.getLogger(__name__)
 
 # 初始化數據獲取器
-# 優先使用 Binance US (推薦),  自動回退到 yfinance
 data_fetcher = DataFetcher(
     preferred_source="binance",
     fallback_to_yfinance=True
@@ -153,7 +153,7 @@ def fetch_latest_candles(symbols, timeframe="15m"):
     
     current_time = time.time()
     if current_time - last_candles_fetch_time < fetch_interval:
-        # 回避頻繁請求
+        # 迴避頻繁請求
         return {}
     
     last_candles_fetch_time = current_time
@@ -184,6 +184,118 @@ def fetch_latest_candles(symbols, timeframe="15m"):
         return {sym: [] for sym in symbols}
 
 
+def generate_diagnostics():
+    """
+    生成完整的診斷報告
+    
+    返回:
+    {
+        "total_symbols": 22,
+        "loaded_classifiers": 15,
+        "loaded_validity_models": 15,
+        "classifiers": [
+            {
+                "symbol": "BTCUSDT",
+                "status": "已加載" or "預設值",
+                "file": "BTCUSDT_bb_classifier.pkl",
+                "features": 8,
+                "diagnosis": "OK" or "缺失"
+            },
+            ...
+        ],
+        "validity_models": [...],
+        "data_source": "Binance US" or "yfinance",
+        "diagnostic_report": "..."
+    }
+    """
+    diagnostics = {
+        "total_symbols": len(bb_detector_v2.symbols),
+        "loaded_classifiers": len(bb_detector_v2.classifiers),
+        "loaded_validity_models": len(bb_detector_v2.validity_models),
+        "classifiers": [],
+        "validity_models": [],
+        "data_source": "Binance US" if (data_fetcher.binance_fetcher and data_fetcher.binance_fetcher.initialized) else "yfinance",
+    }
+    
+    # 分類器診斷
+    for symbol in bb_detector_v2.symbols:
+        classifier_path = f"models/{symbol}_bb_classifier.pkl"
+        is_loaded = symbol in bb_detector_v2.classifiers
+        
+        diagnostics["classifiers"].append({
+            "symbol": symbol,
+            "status": "已加載" if is_loaded else "預設值",
+            "file": classifier_path,
+            "features": 8 if is_loaded else "-",
+            "diagnosis": "✓ 正常運作" if is_loaded else "⚠ 使用啟發式判斷"
+        })
+    
+    # 有效性模型診斷
+    for symbol in bb_detector_v2.symbols:
+        validity_path = f"models/{symbol}_validity_model.pkl"
+        is_loaded = symbol in bb_detector_v2.validity_models
+        
+        diagnostics["validity_models"].append({
+            "symbol": symbol,
+            "status": "已加載" if is_loaded else "預設值",
+            "file": validity_path,
+            "features": 6 if is_loaded else "-",
+            "diagnosis": "✓ 正常運作" if is_loaded else "⚠ 使用預設 65% 信心度"
+        })
+    
+    # 生成診斷報告
+    report_lines = [
+        "="*70,
+        "BB Bounce ML V2 - 模型診斷報告",
+        "="*70,
+        f"\n系統時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"監控幣種: {diagnostics['total_symbols']} 個",
+        f"數據源: {diagnostics['data_source']}",
+        f"\n[分類器 Layer 1 - BB 位置檢測]",
+        f"已加載: {diagnostics['loaded_classifiers']}/{diagnostics['total_symbols']}",
+        f"加載率: {(diagnostics['loaded_classifiers'] / diagnostics['total_symbols'] * 100):.0f}%",
+        f"\n[有效性模型 Layer 2 - 信號驗證]",
+        f"已加載: {diagnostics['loaded_validity_models']}/{diagnostics['total_symbols']}",
+        f"加載率: {(diagnostics['loaded_validity_models'] / diagnostics['total_symbols'] * 100):.0f}%",
+    ]
+    
+    # 檢查模型文件
+    missing_classifiers = []
+    missing_validity = []
+    
+    for symbol in bb_detector_v2.symbols:
+        if symbol not in bb_detector_v2.classifiers:
+            missing_classifiers.append(symbol)
+        if symbol not in bb_detector_v2.validity_models:
+            missing_validity.append(symbol)
+    
+    if missing_classifiers:
+        report_lines.append(f"\n⚠ 缺失分類器 ({len(missing_classifiers)}): {', '.join(missing_classifiers[:5])}...")
+    else:
+        report_lines.append(f"\n✓ 所有分類器已加載")
+    
+    if missing_validity:
+        report_lines.append(f"⚠ 缺失有效性模型 ({len(missing_validity)}): {', '.join(missing_validity[:5])}...")
+        report_lines.append(f"\n💡 後果: 所有信心度將固定為 65% (預設值)")
+    else:
+        report_lines.append(f"\n✓ 所有有效性模型已加載")
+    
+    report_lines.append(f"\n[建議]",)
+    if missing_classifiers or missing_validity:
+        report_lines.append(f"1. 運行訓練腳本: python train_models.py")
+        report_lines.append(f"2. 檢查 models/ 目錄是否有所有 .pkl 文件")
+        report_lines.append(f"3. 重啟服務: python realtime_service.py")
+    else:
+        report_lines.append(f"✓ 系統正常運作")
+        report_lines.append(f"信心度應該在 30%-95% 範圍內變化")
+    
+    report_lines.append(f"\n" + "="*70)
+    
+    diagnostics["diagnostic_report"] = "\n".join(report_lines)
+    
+    return diagnostics
+
+
 def realtime_scan_loop():
     """
     實時掃描 loop: 每 5 秒執行一次
@@ -209,9 +321,8 @@ def realtime_scan_loop():
             # 2. 加入檢測器緩衝區
             for symbol, candles in latest_candles.items():
                 if len(candles) > 0:
-                    # 只添加最新的 K 線 (最後一個)
-                    # 或者全部添加以保持完整歷史
-                    for candle in candles[-5:]:  # 保留最新 5 根 K 線
+                    # 保留最新 5 根 K 線
+                    for candle in candles[-5:]:
                         bb_detector_v2.add_candle(symbol, candle)
             
             # 3. 執行二層掃描 (所有 22 個幣種)
@@ -260,6 +371,11 @@ def detector_dashboard():
     return render_template("realtime_dashboard_v2.html")
 
 
+@app.route("/debug")
+def debug_dashboard():
+    return render_template("debug_dashboard.html")
+
+
 @app.route("/api/symbols")
 def api_symbols():
     return {
@@ -293,6 +409,11 @@ def api_status():
         "signals_count": len(last_signals),
         "scanner_active": scan_active,
     }
+
+
+@app.route("/api/diagnostics")
+def api_diagnostics():
+    return generate_diagnostics()
 
 
 # ========== WebSocket Events ==========
@@ -440,6 +561,13 @@ def handle_force_refresh(data):
         })
 
 
+@socketio.on("request_diagnostics")
+def handle_request_diagnostics():
+    logger.info("[socket] Request diagnostics")
+    diagnostics = generate_diagnostics()
+    emit("diagnostics_response", diagnostics)
+
+
 # ========== 應用啟動 ==========
 
 if __name__ == "__main__":
@@ -458,6 +586,9 @@ if __name__ == "__main__":
     print(f"  • BB Band Classifier (上下軌分類)")
     print(f"  • Validity Validator (有效性驗證)")
     print("="*70 + "\n")
+    print(f"📊 實時儀表板: http://127.0.0.1:5000/detector")
+    print(f"🔧 調試儀表板: http://127.0.0.1:5000/debug")
+    print()
     
     # 啟動背景掃描 loop
     scan_thread = threading.Thread(target=realtime_scan_loop, daemon=True)
