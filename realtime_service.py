@@ -102,7 +102,7 @@ def realtime_scan_loop():
                 symbol = signal["symbol"]
                 last_signals[symbol] = signal
                 
-                # WebSocket 廣播信號
+                # 廣播信號給所有連接的客戶端
                 socketio.emit(
                     "realtime_signal",
                     signal,
@@ -114,7 +114,7 @@ def realtime_scan_loop():
             # 5. 更新所有幣種狀態 (用於左側幣種列表)
             symbol_states = bb_detector_v2.get_all_symbols_state()
             
-            # 將更新推送給前端 (可選: 定期推送完整列表)
+            # 廣播所有幣種狀態更新給前端
             socketio.emit(
                 "symbols_state_update",
                 symbol_states,
@@ -178,7 +178,7 @@ def handle_connect():
     print(f"[socket] Client connected")
     
     # 連接時推送所有幣種列表
-    socketio.emit("connection_response", {
+    emit("connection_response", {
         "status": "connected",
         "symbols": bb_detector_v2.symbols,
         "count": len(bb_detector_v2.symbols)
