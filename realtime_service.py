@@ -280,7 +280,7 @@ def generate_diagnostics():
     else:
         report_lines.append(f"\n✓ 所有有效性模型已加載")
     
-    report_lines.append(f"\n[建議]",)
+    report_lines.append(f"\n[建議]")
     if missing_classifiers or missing_validity:
         report_lines.append(f"1. 運行訓練腳本: python train_models.py")
         report_lines.append(f"2. 檢查 models/ 目錄是否有所有 .pkl 文件")
@@ -458,7 +458,7 @@ def handle_disconnect():
 
 
 @socketio.on("request_symbol_list")
-def handle_request_symbol_list():
+def handle_request_symbol_list(data=None):
     logger.info("[socket] Request symbol list")
     all_states = bb_detector_v2.get_all_symbols_state()
     emit("symbol_list_response", {
@@ -533,7 +533,7 @@ def handle_set_detection_mode(data):
 
 
 @socketio.on("force_refresh")
-def handle_force_refresh(data):
+def handle_force_refresh(data=None):
     logger.info("[force_refresh] Triggering full scan...")
     try:
         signals = bb_detector_v2.scan_all(timeframe="15m")
@@ -562,7 +562,7 @@ def handle_force_refresh(data):
 
 
 @socketio.on("request_diagnostics")
-def handle_request_diagnostics():
+def handle_request_diagnostics(data=None):
     logger.info("[socket] Request diagnostics")
     diagnostics = generate_diagnostics()
     emit("diagnostics_response", diagnostics)
