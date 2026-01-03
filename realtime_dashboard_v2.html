@@ -320,6 +320,20 @@
       letter-spacing: 0.08em;
     }
 
+    .selection-info {
+      font-size: 11px;
+      color: #9ca3af;
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(55, 65, 81, 0.9);
+    }
+
+    .selection-info span.count {
+      color: #bbf7d0;
+      font-weight: 600;
+    }
+
     .symbol-list {
       display: flex;
       flex-direction: column;
@@ -347,7 +361,7 @@
       transform: translateY(-0.5px);
     }
 
-    .symbol-item.active {
+    .symbol-item.selected {
       border-color: rgba(56, 189, 248, 0.9);
       box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.55);
       background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.25), transparent 60%), rgba(15, 23, 42, 0.98);
@@ -357,6 +371,7 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
+      flex: 1;
     }
 
     .symbol-name-row {
@@ -397,98 +412,34 @@
       color: #9ca3af;
     }
 
-    .symbol-right {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 2px;
-    }
-
-    .symbol-score {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 11px;
-      color: #bbf7d0;
-    }
-
-    .symbol-score span.value {
-      font-weight: 600;
-      color: #4ade80;
-    }
-
-    .symbol-score span.badge {
-      padding: 1px 6px;
-      border-radius: 999px;
-      background: rgba(22, 163, 74, 0.25);
-      border: 1px solid rgba(34, 197, 94, 0.7);
-      font-size: 10px;
-      color: #bbf7d0;
-    }
-
-    .symbol-health {
-      font-size: 10px;
-      color: #93c5fd;
-    }
-
-    .health-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 999px;
-      background: #22c55e;
-      box-shadow: 0 0 10px rgba(34, 197, 94, 0.9);
-    }
-
-    .symbol-health span {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .toggle-row {
+    .symbol-checkbox {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      margin-top: 4px;
-      padding-top: 6px;
-      border-top: 1px dashed rgba(55, 65, 81, 0.8);
-    }
-
-    .toggle-row span {
-      font-size: 11px;
-      color: #9ca3af;
-    }
-
-    .switch {
-      position: relative;
-      width: 30px;
-      height: 16px;
-      border-radius: 999px;
-      background: rgba(31, 41, 55, 1);
-      border: 1px solid rgba(75, 85, 99, 1);
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border: 1.5px solid rgba(148, 163, 184, 0.6);
+      border-radius: 6px;
+      background: transparent;
       cursor: pointer;
-      transition: background 0.12s ease-out, border-color 0.12s ease-out;
+      transition: all 0.12s ease-out;
     }
 
-    .switch-handle {
-      position: absolute;
-      top: 1px;
-      left: 1px;
-      width: 12px;
-      height: 12px;
-      border-radius: 999px;
-      background: #e5e7eb;
-      transition: transform 0.12s ease-out;
+    .symbol-item.selected .symbol-checkbox {
+      background: #22c55e;
+      border-color: #22c55e;
     }
 
-    .switch.on {
-      background: rgba(34, 197, 94, 0.2);
-      border-color: rgba(34, 197, 94, 0.8);
+    .symbol-checkbox::after {
+      content: "\2713";
+      color: #0b1120;
+      font-size: 12px;
+      font-weight: 600;
+      display: none;
     }
 
-    .switch.on .switch-handle {
-      transform: translateX(12px);
-      background: #bbf7d0;
+    .symbol-item.selected .symbol-checkbox::after {
+      display: block;
     }
 
     .signals-panel {
@@ -962,20 +913,15 @@
       <section class="panel">
         <div class="panel-header">
           <div class="panel-title">
-            <h2>監控幣種</h2>
+            <h2>選擇幣種</h2>
             <span class="sub">22 個幣種 · 可擴展到 50+</span>
           </div>
           <span class="tag">每 5 秒購描一次</span>
         </div>
         <div class="sidebar-section">
           <h3>全部幣種</h3>
+          <div class="selection-info">已選擇: <span class="count" id="selected-count">0</span> 個</div>
           <div class="symbol-list" id="symbol-list"></div>
-          <div class="toggle-row">
-            <span>只顯示有信號的幣種</span>
-            <div class="switch on" id="filter-active-switch" role="switch" aria-checked="true">
-              <div class="switch-handle"></div>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -983,7 +929,7 @@
         <div class="panel-header">
           <div class="panel-title">
             <h2>實時信號流</h2>
-            <span class="sub">二層架構 · 避免 80% 不必要計算 · 高質量信號</span>
+            <span class="sub">二層架構 · 避免 80% 不必計算 · 高質量信號</span>
           </div>
           <span class="tag">層級 2: 有效性驗證 (50–100ms)</span>
         </div>
@@ -1140,9 +1086,10 @@
     const socket = io();
 
     let paused = false;
-    let filterActiveOnly = true;
+    let filterActiveOnly = false;  // 厚運下改成選擇制: 只顯示已選擇的幣種
     let activeQualityFilters = new Set(["excellent", "good"]);
     let activeDirectionFilters = new Set(["long", "short"]);
+    let selectedSymbols = new Set();  // 用戶已選擇的幣種
 
     let latestSignals = [];
     let symbolsState = {};  // symbol -> state
@@ -1151,6 +1098,7 @@
     const symbolListEl = document.getElementById("symbol-list");
     const signalsBodyEl = document.getElementById("signals-body");
     const signalsSummaryEl = document.getElementById("signals-summary");
+    const selectedCountEl = document.getElementById("selected-count");
     const systemHealthTextEl = document.getElementById("system-health-text");
 
     function qualityLabel(prob) {
@@ -1203,10 +1151,8 @@
       symbolListEl.innerHTML = "";
 
       for (const [symbol, state] of entries) {
-        if (filterActiveOnly && !state.last_signal) continue;
-
         const el = document.createElement("div");
-        el.className = "symbol-item" + (state.active ? " active" : "");
+        el.className = "symbol-item" + (selectedSymbols.has(symbol) ? " selected" : "");
 
         const base = document.createElement("div");
         base.className = "symbol-main";
@@ -1224,7 +1170,7 @@
 
         const statusSpan = document.createElement("span");
         statusSpan.className = "symbol-status " + (state.last_signal ? "has_signal" : "idle");
-        statusSpan.textContent = state.last_signal ? "信號" : "審視中";
+        statusSpan.textContent = state.last_signal ? "信號" : "實時";
 
         row.appendChild(nameSpan);
         row.appendChild(tfSpan);
@@ -1235,62 +1181,53 @@
         if (state.last_signal) {
           meta.textContent = `最後: ${formatTime(state.last_signal.timestamp)}`;
         } else {
-          meta.textContent = "尚無信號";
+          meta.textContent = "正實時掃描";
         }
 
         base.appendChild(row);
         base.appendChild(meta);
 
-        const right = document.createElement("div");
-        right.className = "symbol-right";
-
-        if (state.last_signal) {
-          const q = qualityLabel(state.last_signal.validity_prob || 0);
-          const score = document.createElement("div");
-          score.className = "symbol-score";
-          const valSpan = document.createElement("span");
-          valSpan.className = "value";
-          valSpan.textContent = `${Math.round((state.last_signal.validity_prob || 0) * 100)}%`;
-          const badgeSpan = document.createElement("span");
-          badgeSpan.className = "badge";
-          badgeSpan.textContent = qualityDisplay(state.last_signal.validity_prob || 0);
-          score.appendChild(valSpan);
-          score.appendChild(badgeSpan);
-          right.appendChild(score);
-        }
-
-        const health = document.createElement("div");
-        health.className = "symbol-health";
-        const hl = document.createElement("span");
-        const dot = document.createElement("span");
-        dot.className = "health-dot";
-        const text = document.createElement("span");
-        text.textContent = "正常";
-        hl.appendChild(dot);
-        hl.appendChild(text);
-        health.appendChild(hl);
-        right.appendChild(health);
+        const checkbox = document.createElement("div");
+        checkbox.className = "symbol-checkbox";
 
         el.appendChild(base);
-        el.appendChild(right);
+        el.appendChild(checkbox);
 
         el.addEventListener("click", () => {
-          for (const k of Object.keys(symbolsState)) {
-            symbolsState[k].active = false;
+          const isSelected = selectedSymbols.has(symbol);
+          if (isSelected) {
+            selectedSymbols.delete(symbol);
+          } else {
+            selectedSymbols.add(symbol);
           }
-          state.active = true;
+
+          // 鑖生伺服勑器
+          socket.emit("select_symbol", {
+            symbol: symbol,
+            selected: !isSelected
+          });
+
           renderSymbols();
+          renderSignals();
+          updateSelectedCount();
         });
 
         symbolListEl.appendChild(el);
       }
     }
 
+    function updateSelectedCount() {
+      selectedCountEl.textContent = selectedSymbols.size;
+    }
+
     function renderSignals() {
       signalsBodyEl.innerHTML = "";
 
       const now = Date.now();
-      const lastMinuteSignals = latestSignals.filter((s) => now - s.timestamp <= 60_000);
+      // 篦濆迩新 1 分鐘轍䯊訊重且匹配已選擇的幣種
+      const lastMinuteSignals = latestSignals.filter(
+        (s) => now - s.timestamp <= 60_000 && selectedSymbols.has(s.symbol)
+      );
       const excellentCount = lastMinuteSignals.filter(
         (s) => (s.validity_prob || 0) >= 0.75
       ).length;
@@ -1301,6 +1238,9 @@
       signalsSummaryEl.innerHTML = `最近 1 分鐘: <strong>${lastMinuteSignals.length}</strong> 個信號 · <strong>${excellentCount}</strong> 個 EXCELLENT · <strong>${goodCount}</strong> 個 GOOD`;
 
       for (const s of latestSignals) {
+        // 又寺下克層渀辞（麽: 選擇幣種せい課労それず)
+        if (!selectedSymbols.has(s.symbol)) continue;
+
         const prob = s.validity_prob || 0;
         const q = qualityLabel(prob);
 
@@ -1392,8 +1332,7 @@
           symbolsState[symbol] = {
             symbol: symbol,
             status: "idle",
-            last_signal: null,
-            active: symbol === "BTCUSDT",  // 預設選擇 BTC
+            last_signal: null
           };
         }
         // 更新狀態
@@ -1489,17 +1428,6 @@
         }
         renderSignals();
       });
-    });
-
-    document.getElementById("filter-active-switch").addEventListener("click", () => {
-      filterActiveOnly = !filterActiveOnly;
-      const sw = document.getElementById("filter-active-switch");
-      if (filterActiveOnly) {
-        sw.classList.add("on");
-      } else {
-        sw.classList.remove("on");
-      }
-      renderSymbols();
     });
   </script>
 </body>
