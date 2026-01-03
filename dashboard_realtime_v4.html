@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BB 反彈實時監控系統 V4 + 波動性 + 接近提示</title>
+    <title>BB 反彈實時監控系統 V4 + 波動 + 接近提示</title>
     <style>
         * {
             margin: 0;
@@ -19,7 +19,7 @@
             overflow-x: hidden;
         }
 
-        /* 頻部導航 */
+        /* 頭部導航 */
         .header {
             background: rgba(15, 15, 15, 0.95);
             border-bottom: 2px solid #00bcd4;
@@ -80,7 +80,7 @@
             50% { opacity: 0.5; }
         }
 
-        /* 依標頁面 */
+        /* 標籤頁面 */
         .tabs {
             max-width: 1400px;
             margin: 0 auto;
@@ -217,7 +217,7 @@
             background: rgba(0, 188, 212, 0.2);
         }
 
-        /* 詳細信歸面板 */
+        /* 詳細信息面板 */
         .detail-panel {
             background: rgba(20, 20, 20, 0.6);
             border: 1px solid rgba(0, 188, 212, 0.15);
@@ -265,90 +265,73 @@
             color: #ffc107;
         }
 
-        /* 接近提示段 */
-        .approaching-alert {
-            background: rgba(255, 87, 34, 0.15);
-            border: 2px solid #ff5722;
+        /* 接近程度段 */
+        .approaching-progress {
+            background: rgba(30, 30, 30, 0.6);
+            border: 1px solid rgba(0, 188, 212, 0.2);
             border-radius: 10px;
             padding: 20px;
             margin-top: 20px;
-            animation: pulse-alert 2s infinite;
         }
 
-        .approaching-alert.danger {
-            background: rgba(255, 87, 34, 0.25);
-            border-color: #ff5722;
-        }
-
-        .approaching-alert.warning {
-            background: rgba(255, 152, 0, 0.15);
-            border-color: #ff9800;
-        }
-
-        .approaching-alert.caution {
-            background: rgba(255, 193, 7, 0.15);
-            border-color: #ffc107;
-        }
-
-        @keyframes pulse-alert {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 87, 34, 0.7); }
-            50% { box-shadow: 0 0 0 10px rgba(255, 87, 34, 0); }
-        }
-
-        .approaching-alert.warning {
-            animation: pulse-alert-warning 2s infinite;
-        }
-
-        @keyframes pulse-alert-warning {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7); }
-            50% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0); }
-        }
-
-        .alert-title {
-            font-size: 16px;
+        .progress-title {
+            font-size: 14px;
             font-weight: 700;
-            color: #ff5722;
-            margin-bottom: 12px;
+            color: #00bcd4;
+            margin-bottom: 15px;
+        }
+
+        .progress-row {
+            display: grid;
+            grid-template-columns: 100px 1fr 80px;
+            gap: 15px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+
+        .progress-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #80d0d8;
+        }
+
+        .progress-bar {
+            background: rgba(0, 188, 212, 0.1);
+            border-radius: 4px;
+            height: 24px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            background: linear-gradient(90deg, #4caf50, #81c784);
+            height: 100%;
+            transition: width 0.3s ease;
             display: flex;
             align-items: center;
-            gap: 8px;
-        }
-
-        .alert-title.warning {
-            color: #ff9800;
-        }
-
-        .alert-title.caution {
-            color: #ffc107;
-        }
-
-        .alert-content {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 15px;
-        }
-
-        .alert-item {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .alert-label {
+            justify-content: center;
             font-size: 10px;
-            color: #ffffff;
-            text-transform: uppercase;
+            color: #0f0f0f;
             font-weight: 700;
         }
 
-        .alert-value {
-            font-size: 16px;
+        .progress-fill.approaching {
+            background: linear-gradient(90deg, #ffc107, #ffb300);
+        }
+
+        .progress-fill.danger {
+            background: linear-gradient(90deg, #f44336, #ef5350);
+        }
+
+        .progress-percent {
+            font-size: 12px;
             font-weight: 700;
+            color: #e0e0e0;
             font-family: 'Courier New', monospace;
-            color: #ffeb3b;
+            text-align: right;
         }
 
-        /* 波動性颜色*/
+        /* 波動性顏色*/
         .detail-value.vol-very-high {
             color: #ff5252;
             font-weight: 700;
@@ -369,7 +352,7 @@
         /* Tab 2: 幣種網格 */
         .symbols-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 20px;
             padding: 20px 0;
         }
@@ -504,7 +487,51 @@
             color: #e0e0e0;
         }
 
-        /* 更新時間戴 */
+        /* 距離進度條 */
+        .symbol-distance {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(0, 188, 212, 0.1);
+        }
+
+        .distance-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 10px;
+        }
+
+        .distance-label {
+            color: #80d0d8;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .distance-percent {
+            color: #ffb300;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+        }
+
+        .mini-progress {
+            background: rgba(0, 188, 212, 0.1);
+            border-radius: 2px;
+            height: 4px;
+            overflow: hidden;
+        }
+
+        .mini-progress-fill {
+            background: #ffc107;
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+
+        .mini-progress-fill.danger {
+            background: #f44336;
+        }
+
+        /* 更新時間戳 */
         .update-timestamp {
             font-size: 11px;
             color: #80d0d8;
@@ -533,7 +560,7 @@
             color: #e0e0e0;
         }
 
-        /* 自定義滑動條 */
+        /* 自定義滾動條 */
         ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
@@ -552,7 +579,7 @@
             background: rgba(0, 188, 212, 0.5);
         }
 
-        /* 响應式設計 */
+        /* 響應式設計 */
         @media (max-width: 768px) {
             .header-content {
                 flex-direction: column;
@@ -579,7 +606,7 @@
     </style>
 </head>
 <body>
-    <!-- 頻部 -->
+    <!-- 頭部 -->
     <div class="header">
         <div class="header-content">
             <div class="logo">BB 反彈實時監控系統 V4 + 波動 + 接近提示</div>
@@ -595,7 +622,7 @@
         </div>
     </div>
 
-    <!-- 依標頁面 -->
+    <!-- 標籤頁面 -->
     <div class="tabs">
         <div class="tab-buttons">
             <button class="tab-button active" onclick="switchTab(0)">詳細分析</button>
@@ -743,10 +770,10 @@
             let statusText = '未觸及';
             if (touched && touchType === 'lower') {
                 statusClass = 'positive';
-                statusText = '觸厬下軌 ↓';
+                statusText = '觸及下軌';
             } else if (touched && touchType === 'upper') {
                 statusClass = 'negative';
-                statusText = '觸厬上軌 ↑';
+                statusText = '觸及上軌';
             }
 
             let volClass = 'vol-low';
@@ -755,47 +782,33 @@
             else if (volLevel === 'high') volClass = 'vol-high';
             else if (volLevel === 'moderate') volClass = 'vol-moderate';
 
-            // 接近提示 HTML
+            // 接近程度 HTML
             let approachingHTML = '';
-            if (approach.approaching || approach.direction) {
-                const warningLevel = approach.warning_level || 'none';
-                const distancePercent = (approach.distance_percent || 0).toFixed(2);
-                const direction = approach.direction === 'upper' ? '上軌 ↑' : '下軌 ↓';
-                
-                let alertIcon = '!!';
-                let alertTitle = '';
-                
-                if (warningLevel === 'danger') {
-                    alertIcon = '⚠️';
-                    alertTitle = `細被警告: 接近 ${direction} (${distancePercent}%)`;
-                } else if (warningLevel === 'warning') {
-                    alertIcon = '⁈️';
-                    alertTitle = `接近提示: 即將觸厬 ${direction} (${distancePercent}%)`;
-                } else if (warningLevel === 'caution') {
-                    alertIcon = 'i';
-                    alertTitle = `輕微提示: 接近 ${direction} (${distancePercent}%)`;
-                }
+            if (bb.bb_upper && bb.current_high) {
+                const distToUpper = ((bb.bb_upper - bb.current_high) / bb.current_high * 100).toFixed(2);
+                const distToLower = ((bb.current_low - bb.bb_lower) / bb.current_low * 100).toFixed(2);
+                const maxDist = 5; // 最大顯示 5%
 
-                const alertClass = `approaching-alert ${warningLevel}`;
-                
                 approachingHTML = `
-                    <div class="${alertClass}">
-                        <div class="alert-title ${warningLevel === 'caution' ? 'caution' : (warningLevel === 'warning' ? 'warning' : 'danger')}">
-                            ${alertIcon} ${alertTitle}
+                    <div class="approaching-progress">
+                        <div class="progress-title">接近程度監測</div>
+                        <div class="progress-row">
+                            <div class="progress-label">接近上軌</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill ${parseFloat(distToUpper) < 1 ? 'danger' : 'approaching'}" style="width: ${Math.min(parseFloat(distToUpper) / maxDist * 100, 100)}%">
+                                    ${parseFloat(distToUpper) > 0 ? parseFloat(distToUpper).toFixed(2) + '%' : ''}
+                                </div>
+                            </div>
+                            <div class="progress-percent">${distToUpper}%</div>
                         </div>
-                        <div class="alert-content">
-                            <div class="alert-item">
-                                <div class="alert-label">接近方向</div>
-                                <div class="alert-value">${direction}</div>
+                        <div class="progress-row">
+                            <div class="progress-label">接近下軌</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill ${parseFloat(distToLower) < 1 ? 'danger' : 'approaching'}" style="width: ${Math.min(parseFloat(distToLower) / maxDist * 100, 100)}%">
+                                    ${parseFloat(distToLower) > 0 ? parseFloat(distToLower).toFixed(2) + '%' : ''}
+                                </div>
                             </div>
-                            <div class="alert-item">
-                                <div class="alert-label">距離率</div>
-                                <div class="alert-value">${distancePercent}%</div>
-                            </div>
-                            <div class="alert-item">
-                                <div class="alert-label">警告級別</div>
-                                <div class="alert-value">${warningLevel.toUpperCase()}</div>
-                            </div>
+                            <div class="progress-percent">${distToLower}%</div>
                         </div>
                     </div>
                 `;
@@ -812,7 +825,7 @@
                         <div class="detail-value">${timeframe}</div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">觸碑狀態</div>
+                        <div class="detail-label">觸厬狀態</div>
                         <div class="detail-value ${statusClass}">${statusText}</div>
                     </div>
                     <div class="detail-item">
@@ -900,22 +913,47 @@
             if (touched && touchType === 'lower') {
                 cardClass = 'touched-lower';
                 statusClass = 'touched-lower';
-                statusText = '下軌 ↓';
+                statusText = '下軌';
             } else if (touched && touchType === 'upper') {
                 cardClass = 'touched-upper';
                 statusClass = 'touched-upper';
-                statusText = '上軌 ↑';
+                statusText = '上軌';
             } else if (approach.direction) {
-                // 接近一軌
                 cardClass = 'approaching';
                 statusClass = 'approaching';
-                const dir = approach.direction === 'upper' ? '↑' : '↓';
-                const dist = (approach.distance_percent || 0).toFixed(1);
-                statusText = `接近${dir} ${dist}%`;
+                const dir = approach.direction === 'upper' ? '上' : '下';
+                statusText = `接近${dir}軌`;
             }
 
             const now = new Date();
             const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
+
+            // 距離進度條 HTML
+            let distanceHTML = '';
+            if (bb.bb_upper && bb.current_high) {
+                const distToUpper = ((bb.bb_upper - bb.current_high) / bb.current_high * 100).toFixed(2);
+                const distToLower = ((bb.current_low - bb.bb_lower) / bb.current_low * 100).toFixed(2);
+                const maxDist = 5;
+
+                distanceHTML = `
+                    <div class="symbol-distance">
+                        <div class="distance-row">
+                            <div class="distance-label">上軌距</div>
+                            <div class="distance-percent">${distToUpper}%</div>
+                        </div>
+                        <div class="mini-progress">
+                            <div class="mini-progress-fill ${parseFloat(distToUpper) < 1 ? 'danger' : ''}" style="width: ${Math.min(parseFloat(distToUpper) / maxDist * 100, 100)}%"></div>
+                        </div>
+                        <div class="distance-row" style="margin-top: 8px;">
+                            <div class="distance-label">下軌距</div>
+                            <div class="distance-percent">${distToLower}%</div>
+                        </div>
+                        <div class="mini-progress">
+                            <div class="mini-progress-fill ${parseFloat(distToLower) < 1 ? 'danger' : ''}" style="width: ${Math.min(parseFloat(distToLower) / maxDist * 100, 100)}%"></div>
+                        </div>
+                    </div>
+                `;
+            }
 
             return `
                 <div class="symbol-card ${cardClass}">
@@ -948,11 +986,12 @@
                                 <div class="symbol-bb-value">${parseFloat(bb.bb_lower).toFixed(0)}</div>
                             </div>
                             <div class="symbol-bb-item">
-                                <div class="symbol-bb-label">現傷</div>
+                                <div class="symbol-bb-label">現價</div>
                                 <div class="symbol-bb-value">${parseFloat(bb.current_high).toFixed(0)}</div>
                             </div>
                         </div>
                     ` : ''}
+                    ${distanceHTML}
                     <div class="update-timestamp">${timeStr}</div>
                 </div>
             `;
