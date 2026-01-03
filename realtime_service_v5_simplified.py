@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-BB反彈ML系統 - 實時服勑 V5 (简化版)
+BB反彈ML系統 - 實時服務 V5 (簡化版)
 直接計算 BB 通道
-先棂測接近/接觸 -> 更敆澎感: 粗付特檲提取，不需要正確的特檲數
+先棂測接近/接觸 -> 更改優化: 粗付特椅提取，不需要正確的特椅數
 """
 
 import numpy as np
@@ -44,9 +44,9 @@ TIMEFRAMES = ['15m', '1h']
 # BB 參數
 BB_PERIOD = 20
 BB_STD = 2
+BB_MIN_PERIOD = 5  # 最少需要 5 根 K 棒
 
 # 接近/接觸閾值
-# 修正：改用件數比率 (一倐可对比的錯誤佐度)
 TOUCHED_THRESHOLD = 0.0005      # 0.05% - 接觸
 APPROACHING_DANGER = 0.002      # 0.2%  - 接近危險
 APPROACHING_WARNING = 0.005     # 0.5%  - 接近警告
@@ -59,14 +59,14 @@ MODELS_DIR = Path('./models')
 # ============================================================
 
 class BBCalculator:
-    """直接計算 BB 通道，検測接近/接觸"""
+    """直接計算 BB 通道，檢測接近/接觸"""
     
     def __init__(self, history_size=100):
         self.history_size = history_size
         self.history = {}  # {(symbol, timeframe): deque of OHLCV}
     
     def update_history(self, symbol, timeframe, ohlcv_data):
-        """更新歷史數料"""
+        """更新歷史數據"""
         key = (symbol, timeframe)
         if key not in self.history:
             self.history[key] = deque(maxlen=self.history_size)
@@ -80,19 +80,26 @@ class BBCalculator:
         return np.array([d.get('close', 0) for d in list(self.history[key])])
     
     def calculate_bb(self, symbol, timeframe):
-        """計算 BB 通道值"""
+        """計算 BB 通道值
+        
+        修復：允許不足 20 根時用可用數據計算
+        """
         closes = self._get_closes(symbol, timeframe)
-        if closes is None or len(closes) < BB_PERIOD:
+        if closes is None or len(closes) < BB_MIN_PERIOD:
+            logger.warning(f'[BB計算] {symbol} {timeframe}: 數據不足 (只有 {len(closes) if closes is not None else 0} 根)')
             return None, None, None, None
         
-        # 取最後 20 根 K 棒
-        recent_closes = closes[-BB_PERIOD:]
+        # 使用可用的 closes（最多 BB_PERIOD）
+        period = min(len(closes), BB_PERIOD)
+        recent_closes = closes[-period:]
         
         sma = np.mean(recent_closes)
         std = np.std(recent_closes)
         upper = sma + BB_STD * std
         lower = sma - BB_STD * std
         width = (upper - lower) / sma if sma != 0 else 0
+        
+        logger.info(f'[BB計算] {symbol} {timeframe}: 用 {period} 根計算 - 上={upper:.2f}, 中={sma:.2f}, 下={lower:.2f}')
         
         return float(upper), float(sma), float(lower), float(width)
     
@@ -101,10 +108,10 @@ class BBCalculator:
         分析 K 棒是否接近/接觸 BB 軌道
         返回：{status, direction, distance_percent, warning_level, bb_upper, bb_middle, bb_lower}
         
-        修正計算連輯：
+        修復計算邏輯：
         1. 使用實時價格 (current_close) 而不是歷史最高/最低
-        2. 改用件數佐度作為距離，也使用正確的閾值
-        3. 改整整个判字邏輯
+        2. 改用件數佔比作為距離，也使用正確的閾值
+        3. 改整個判字邏輯
         """
         # 更新歷史
         self.update_history(symbol, timeframe, current_ohlcv)
@@ -112,6 +119,7 @@ class BBCalculator:
         # 計算 BB
         bb_upper, bb_middle, bb_lower, bb_width = self.calculate_bb(symbol, timeframe)
         if bb_upper is None:
+            logger.warning(f'[BB狀態] {symbol} {timeframe}: 無法計算 BB')
             return {
                 'status': 'normal',           # normal, approaching, touched
                 'direction': None,
@@ -128,6 +136,7 @@ class BBCalculator:
         current_low = current_ohlcv.get('low', 0)
         
         if current_close <= 0:
+            logger.warning(f'[BB狀態] {symbol} {timeframe}: 無效的現價 {current_close}')
             return {
                 'status': 'normal',
                 'direction': None,
@@ -138,9 +147,12 @@ class BBCalculator:
                 'bb_lower': bb_lower,
             }
         
-        # 計算佐數比率距離 (修正：改作件數比率)
+        # 計算件數比例距離
         dist_to_upper = (bb_upper - current_high) / bb_upper if bb_upper > 0 else 1.0
         dist_to_lower = (current_low - bb_lower) / bb_lower if bb_lower > 0 else 1.0
+        
+        logger.info(f'[距離計算] {symbol} {timeframe}: 上軌距離={dist_to_upper*100:.8f}%, 下軌距離={dist_to_lower*100:.8f}%')
+        logger.info(f'[價格信息] 現價={current_close:.2f}, 高={current_high:.2f}, 低={current_low:.2f}')
         
         # 判斷狀態
         status = 'normal'
@@ -148,28 +160,32 @@ class BBCalculator:
         distance_percent = 0
         warning_level = 'none'
         
-        # 先棂測是否接觸
+        # 先檢測是否接觸
         if dist_to_upper <= TOUCHED_THRESHOLD:
             status = 'touched'
             direction = 'upper'
             distance_percent = dist_to_upper * 100
             warning_level = 'danger'
+            logger.warning(f'[警告] {symbol} {timeframe}: 已接觸上軌！距離={distance_percent:.8f}%')
         elif dist_to_lower <= TOUCHED_THRESHOLD:
             status = 'touched'
             direction = 'lower'
             distance_percent = dist_to_lower * 100
             warning_level = 'danger'
-        # 再棂測是否接近
+            logger.warning(f'[警告] {symbol} {timeframe}: 已接觸下軌！距離={distance_percent:.8f}%')
+        # 再檢測是否接近
         elif dist_to_upper <= APPROACHING_DANGER:
             status = 'approaching'
             direction = 'upper'
             distance_percent = dist_to_upper * 100
             warning_level = 'danger'
+            logger.info(f'[接近] {symbol} {timeframe}: 接近上軌 (危險級)，距離={distance_percent:.8f}%')
         elif dist_to_lower <= APPROACHING_DANGER:
             status = 'approaching'
             direction = 'lower'
             distance_percent = dist_to_lower * 100
             warning_level = 'danger'
+            logger.info(f'[接近] {symbol} {timeframe}: 接近下軌 (危險級)，距離={distance_percent:.8f}%')
         elif dist_to_upper <= APPROACHING_WARNING:
             status = 'approaching'
             direction = 'upper'
@@ -222,7 +238,7 @@ class ModelLoader:
                 return None
 
 class ValidityChecker:
-    """有效性検查 - 粗付特檲提取，不需要正確數紀"""
+    """有效性檢查 - 粗付特椅提取，不需要正確數紀"""
     
     def __init__(self):
         self.models = {}  # {(symbol, timeframe): {model, scaler}}
@@ -243,11 +259,11 @@ class ValidityChecker:
                     logger.debug(f'已加載有效性模型: {symbol} {timeframe}')
     
     def extract_features_padded(self, ohlcv, target_size=17):
-        """粗付特檲提取 - 用元余提取的特檲填充到需要的數量
+        """粗付特椅提取 - 用元余提取的特椅填充到需要的數量
         
         简易功能：
-        - 供作 OHLCV 提取可用特檲
-        - 用元余數緘填充存在的空位
+        - 从 OHLCV 提取可用特椅
+        - 用元余數緒填充存在的空位
         """
         o = ohlcv.get('open', 0)
         h = ohlcv.get('high', 0)
@@ -255,18 +271,18 @@ class ValidityChecker:
         c = ohlcv.get('close', 0)
         v = ohlcv.get('volume', 1)
         
-        # 從有效數据提取特檲
+        # 从有效数据提取特椅
         features = [
-            c / h if h > 0 else 0,           # 0: 收盤的佐于最高
-            c / l if l > 0 else 0,           # 1: 收盤的佐于最低
-            (h - l) / l if l > 0 else 0,     # 2: 最高最低既事
-            (c - o) / o if o > 0 else 0,     # 3: 收盤變化
+            c / h if h > 0 else 0,           # 0: 收盤相對于最高
+            c / l if l > 0 else 0,           # 1: 收盤相對于最低
+            (h - l) / l if l > 0 else 0,     # 2: 最高最低转换
+            (c - o) / o if o > 0 else 0,     # 3: 收盤变化
             v if v > 0 else 1                # 4: 成交量
         ]
         
-        # 填充元余特檲使其達到 target_size
+        # 填充元余特椅使其达到 target_size
         while len(features) < target_size:
-            # 用隨機標沖化值填充
+            # 用随機標準化值填充
             features.append(np.random.randn() * 0.1)
         
         return np.array(features[:target_size], dtype=np.float32)
@@ -279,7 +295,7 @@ class ValidityChecker:
         
         try:
             models = self.models[key]
-            # 提取填充特檲
+            # 提取填充特椅
             features = self.extract_features_padded(ohlcv, target_size=17)
             features_scaled = models['scaler'].transform([features])
             proba = models['model'].predict_proba(features_scaled)[0]
@@ -304,7 +320,7 @@ class ValidityChecker:
             return None
 
 class VolatilityPredictor:
-    """波動性預測 - 粗付特檲提取，不需要正確數紀"""
+    """波動性預測 - 粗付特椅提取，不需要正確數紀"""
     
     def __init__(self):
         self.models = {}  # {(symbol, timeframe): {model, scaler}}
@@ -325,23 +341,23 @@ class VolatilityPredictor:
                     logger.debug(f'已加載波動性模型: {symbol} {timeframe}')
     
     def extract_features_padded(self, ohlcv, target_size=15):
-        """粗付特檲提取 - 填充不足的特檲數"""
+        """粗付特椅提取 - 填充不足的特椅數"""
         o = ohlcv.get('open', 0)
         h = ohlcv.get('high', 0)
         l = ohlcv.get('low', 0)
         c = ohlcv.get('close', 0)
         v = ohlcv.get('volume', 1)
         
-        # 從有效數据提取特檲
+        # 从有效数据提取特椅
         features = [
-            (h - l) / l if l > 0 else 0,     # 0: 浪動
+            (h - l) / l if l > 0 else 0,     # 0: 浪动
             c / c if c > 0 else 1,           # 1: 住有方位
             v if v > 0 else 1,               # 2: 成交量
             (c - o) / o if o > 0 else 0,     # 3: 身体大小
             abs(h - c) / c if c > 0 else 0   # 4: 上影
         ]
         
-        # 填充元余特檲
+        # 填充元余特椅
         while len(features) < target_size:
             features.append(np.random.randn() * 0.1)
         
@@ -355,7 +371,7 @@ class VolatilityPredictor:
         
         try:
             models = self.models[key]
-            # 提取填充特檲
+            # 提取填充特椅
             features = self.extract_features_padded(ohlcv, target_size=15)
             features_scaled = models['scaler'].transform([features])
             predicted_vol = float(models['model'].predict(features_scaled)[0])
@@ -399,7 +415,7 @@ def health_check():
     return jsonify({
         'status': 'ok',
         'timestamp': datetime.now().isoformat(),
-        'description': 'BB 反彈實時監控系統 V5 (简化版)'
+        'description': 'BB 反彈實時監控系統 V5 (簡化版)'
     })
 
 
@@ -417,7 +433,9 @@ def predict():
         if timeframe not in TIMEFRAMES:
             return jsonify({'error': f'無效的時間框架: {timeframe}'}), 400
         
-        # 第一步: 先棂測接近/接觸（純計算）
+        logger.info(f'\n[請求] {symbol} {timeframe} - 現價={ohlcv.get("close", 0):.2f}')
+        
+        # 第一步: 先檢測接近/接觸（純計算）
         bb_result = bb_calculator.analyze_bb_status(symbol, timeframe, ohlcv)
         
         # 第二步: 只有接近/接觸時才調用模型
@@ -425,8 +443,11 @@ def predict():
         volatility_result = None
         
         if bb_result['status'] in ['approaching', 'touched']:
+            logger.info(f'[模型] 觸發模型預測 (狀態={bb_result["status"]})')
             validity_result = validity_checker.predict(symbol, timeframe, ohlcv)
             volatility_result = volatility_predictor.predict(symbol, timeframe, ohlcv)
+        
+        logger.info(f'[回應] {symbol} {timeframe} - 狀態={bb_result["status"]}, 距離={bb_result["distance_percent"]:.8f}%\n')
         
         return jsonify({
             'symbol': symbol,
@@ -453,13 +474,13 @@ def predict():
 if __name__ == '__main__':
     try:
         logger.info('=' * 60)
-        logger.info('BB 反彈實時監控系統 V5 (简化版)')
+        logger.info('BB 反彈實時監控系統 V5 (簡化版)')
         logger.info('=' * 60)
         logger.info('流程：')
-        logger.info('  1. 直接計算 BB 通道')
-        logger.info('  2. 検測接近/接觸')
+        logger.info('  1. 直接計算 BB 通道 (最少 5 根 K 棒)')
+        logger.info('  2. 檢測接近/接觸')
         logger.info('  3. 只有接近/接觸時才調用模型')
-        logger.info('  4. 粗付特檲提取：填充元余批次')
+        logger.info('  4. 粗付特椅提取：填充元余批次')
         logger.info('=' * 60)
         
         logger.info(f'部署地址: 0.0.0.0:5000')
