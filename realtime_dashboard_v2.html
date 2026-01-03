@@ -28,7 +28,6 @@
       --color-red-500: rgba(192, 21, 47, 1);
       --color-orange-400: rgba(230, 129, 97, 1);
       --color-orange-500: rgba(168, 75, 47, 1);
-
       --color-brown-600-rgb: 94, 82, 64;
       --color-teal-500-rgb: 33, 128, 141;
       --color-slate-900-rgb: 19, 52, 59;
@@ -53,18 +52,13 @@
       --color-warning: var(--color-orange-400);
       --color-focus-ring: rgba(50, 184, 198, 0.4);
 
-      --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-        sans-serif;
-      --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-        monospace;
-
+      --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       --radius-base: 8px;
       --radius-lg: 12px;
       --radius-full: 9999px;
-
       --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
       --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.55);
-
       --focus-ring: 0 0 0 3px var(--color-focus-ring);
     }
 
@@ -109,8 +103,7 @@
       justify-content: space-between;
       padding: 14px 18px;
       border-radius: 16px;
-      background: radial-gradient(circle at top left, rgba(45, 166, 178, 0.25), transparent 55%),
-        rgba(15, 23, 42, 0.94);
+      background: radial-gradient(circle at top left, rgba(45, 166, 178, 0.25), transparent 55%), rgba(15, 23, 42, 0.94);
       box-shadow: var(--shadow-md);
       border: 1px solid rgba(148, 163, 184, 0.4);
       backdrop-filter: blur(18px);
@@ -126,8 +119,7 @@
       width: 36px;
       height: 36px;
       border-radius: 12px;
-      background: radial-gradient(circle at 30% 0, #a5f3fc, transparent 55%),
-        radial-gradient(circle at 75% 90%, #22d3ee, #0f172a);
+      background: radial-gradient(circle at 30% 0, #a5f3fc, transparent 55%), radial-gradient(circle at 75% 90%, #22d3ee, #0f172a);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -192,8 +184,7 @@
       gap: 6px;
       padding: 6px 10px;
       border-radius: 999px;
-      background: radial-gradient(circle at top left, rgba(34, 197, 94, 0.35), transparent 55%),
-        rgba(15, 23, 42, 0.95);
+      background: radial-gradient(circle at top left, rgba(34, 197, 94, 0.35), transparent 55%), rgba(15, 23, 42, 0.95);
       border: 1px solid rgba(34, 197, 94, 0.5);
       font-size: 11px;
       color: #bbf7d0;
@@ -238,8 +229,7 @@
       gap: 6px;
       cursor: pointer;
       box-shadow: 0 10px 25px rgba(8, 47, 73, 0.75);
-      transition: transform 0.13s ease-out, box-shadow 0.13s ease-out,
-        filter 0.13s ease-out;
+      transition: transform 0.13s ease-out, box-shadow 0.13s ease-out, filter 0.13s ease-out;
     }
 
     .btn-primary:hover {
@@ -334,7 +324,7 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
-      max-height: 260px;
+      max-height: 400px;
       overflow-y: auto;
       padding-right: 2px;
     }
@@ -348,8 +338,7 @@
       background: rgba(15, 23, 42, 0.9);
       border: 1px solid rgba(55, 65, 81, 0.9);
       cursor: pointer;
-      transition: background 0.12s ease-out, border-color 0.12s ease-out,
-        transform 0.12s ease-out;
+      transition: background 0.12s ease-out, border-color 0.12s ease-out, transform 0.12s ease-out;
     }
 
     .symbol-item:hover {
@@ -361,8 +350,7 @@
     .symbol-item.active {
       border-color: rgba(56, 189, 248, 0.9);
       box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.55);
-      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.25), transparent 60%),
-        rgba(15, 23, 42, 0.98);
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.25), transparent 60%), rgba(15, 23, 42, 0.98);
     }
 
     .symbol-main {
@@ -389,6 +377,19 @@
       border-radius: 999px;
       background: rgba(30, 64, 175, 0.85);
       color: #bfdbfe;
+    }
+
+    .symbol-status {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      color: #a3e635;
+      background: rgba(132, 204, 22, 0.2);
+    }
+
+    .symbol-status.idle {
+      color: #9ca3af;
+      background: rgba(75, 85, 99, 0.2);
     }
 
     .symbol-meta {
@@ -519,8 +520,7 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      transition: background 0.12s ease-out, border-color 0.12s ease-out,
-        transform 0.12s ease-out;
+      transition: background 0.12s ease-out, border-color 0.12s ease-out, transform 0.12s ease-out;
     }
 
     .chip span.dot {
@@ -715,8 +715,7 @@
 
     .metric-card {
       border-radius: 10px;
-      background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.3), transparent 60%),
-        rgba(15, 23, 42, 0.98);
+      background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.3), transparent 60%), rgba(15, 23, 42, 0.98);
       border: 1px solid rgba(37, 99, 235, 0.85);
       padding: 8px 9px;
       display: flex;
@@ -726,8 +725,7 @@
     }
 
     .metric-card.alt {
-      background: radial-gradient(circle at top left, rgba(34, 197, 94, 0.25), transparent 60%),
-        rgba(15, 23, 42, 0.98);
+      background: radial-gradient(circle at top left, rgba(34, 197, 94, 0.25), transparent 60%), rgba(15, 23, 42, 0.98);
       border-color: rgba(34, 197, 94, 0.85);
     }
 
@@ -941,7 +939,7 @@
             <span class="pill">22 Symbols · 2-Layer Detection</span>
           </div>
           <div class="header-subtitle">
-            <strong>企業級實時檢測系統</strong> · 位置模型 99% · 有效性模型 94.5% · 訊號延遲 &lt; 1 秒
+            <strong>企業級實時檢測系統</strong> · 位置模型 99% · 有效性模型 94.5% · 訊號延遲 &lt; 1 秒 · 播描間隔 5 秒
           </div>
         </div>
       </div>
@@ -967,10 +965,10 @@
             <h2>監控幣種</h2>
             <span class="sub">22 個幣種 · 可擴展到 50+</span>
           </div>
-          <span class="tag">層級 1: 快速掃描 (10–20ms)</span>
+          <span class="tag">每 5 秒購描一次</span>
         </div>
         <div class="sidebar-section">
-          <h3>關注清單</h3>
+          <h3>全部幣種</h3>
           <div class="symbol-list" id="symbol-list"></div>
           <div class="toggle-row">
             <span>只顯示有信號的幣種</span>
@@ -1072,7 +1070,7 @@
               <span class="main" id="metric-cpu">16%</span>
               <span class="suffix">CPU · <span id="metric-mem">380MB</span> RAM</span>
             </div>
-            <div class="metric-tagline">二層架構避免 ~80% 不必要計算</div>
+            <div class="metric-tagline">二層架構避免 ~80% 不必計算</div>
             <div class="mini-chart-row">
               <div class="mini-chart-label">計算效率</div>
               <div class="mini-chart-bar">
@@ -1147,7 +1145,8 @@
     let activeDirectionFilters = new Set(["long", "short"]);
 
     let latestSignals = [];
-    let symbolsState = {};
+    let symbolsState = {};  // symbol -> state
+    let allSymbols = [];    // 所有 22 個幣種
 
     const symbolListEl = document.getElementById("symbol-list");
     const signalsBodyEl = document.getElementById("signals-body");
@@ -1191,20 +1190,23 @@
     }
 
     function renderSymbols() {
-      const entries = Object.values(symbolsState).sort((a, b) => {
-        if (!a.lastSignal && !b.lastSignal) return a.symbol.localeCompare(b.symbol);
-        if (!a.lastSignal) return 1;
-        if (!b.lastSignal) return -1;
-        return b.lastSignal.timestamp - a.lastSignal.timestamp;
-      });
+      const entries = Object.entries(symbolsState)
+        .sort((a, b) => {
+          const aSignal = a[1].last_signal;
+          const bSignal = b[1].last_signal;
+          if (!aSignal && !bSignal) return a[0].localeCompare(b[0]);
+          if (!aSignal) return 1;
+          if (!bSignal) return -1;
+          return bSignal.timestamp - aSignal.timestamp;
+        });
 
       symbolListEl.innerHTML = "";
 
-      for (const s of entries) {
-        if (filterActiveOnly && !s.lastSignal) continue;
+      for (const [symbol, state] of entries) {
+        if (filterActiveOnly && !state.last_signal) continue;
 
         const el = document.createElement("div");
-        el.className = "symbol-item" + (s.active ? " active" : "");
+        el.className = "symbol-item" + (state.active ? " active" : "");
 
         const base = document.createElement("div");
         base.className = "symbol-main";
@@ -1214,19 +1216,24 @@
 
         const nameSpan = document.createElement("span");
         nameSpan.className = "symbol-name";
-        nameSpan.textContent = s.symbol;
+        nameSpan.textContent = symbol;
 
         const tfSpan = document.createElement("span");
         tfSpan.className = "symbol-tf";
-        tfSpan.textContent = s.timeframe || "15m";
+        tfSpan.textContent = "15m";
+
+        const statusSpan = document.createElement("span");
+        statusSpan.className = "symbol-status " + (state.last_signal ? "has_signal" : "idle");
+        statusSpan.textContent = state.last_signal ? "信號" : "審視中";
 
         row.appendChild(nameSpan);
         row.appendChild(tfSpan);
+        row.appendChild(statusSpan);
 
         const meta = document.createElement("div");
         meta.className = "symbol-meta";
-        if (s.lastSignal) {
-          meta.textContent = `最後信號: ${formatTime(s.lastSignal.ts)}`;
+        if (state.last_signal) {
+          meta.textContent = `最後: ${formatTime(state.last_signal.timestamp)}`;
         } else {
           meta.textContent = "尚無信號";
         }
@@ -1237,16 +1244,16 @@
         const right = document.createElement("div");
         right.className = "symbol-right";
 
-        if (s.lastSignal) {
-          const q = qualityLabel(s.lastSignal.probability || 0);
+        if (state.last_signal) {
+          const q = qualityLabel(state.last_signal.validity_prob || 0);
           const score = document.createElement("div");
           score.className = "symbol-score";
           const valSpan = document.createElement("span");
           valSpan.className = "value";
-          valSpan.textContent = `${Math.round((s.lastSignal.probability || 0) * 100)}%`;
+          valSpan.textContent = `${Math.round((state.last_signal.validity_prob || 0) * 100)}%`;
           const badgeSpan = document.createElement("span");
           badgeSpan.className = "badge";
-          badgeSpan.textContent = qualityDisplay(s.lastSignal.probability || 0);
+          badgeSpan.textContent = qualityDisplay(state.last_signal.validity_prob || 0);
           score.appendChild(valSpan);
           score.appendChild(badgeSpan);
           right.appendChild(score);
@@ -1258,7 +1265,7 @@
         const dot = document.createElement("span");
         dot.className = "health-dot";
         const text = document.createElement("span");
-        text.textContent = "資料流正常";
+        text.textContent = "正常";
         hl.appendChild(dot);
         hl.appendChild(text);
         health.appendChild(hl);
@@ -1271,7 +1278,7 @@
           for (const k of Object.keys(symbolsState)) {
             symbolsState[k].active = false;
           }
-          s.active = true;
+          state.active = true;
           renderSymbols();
         });
 
@@ -1285,16 +1292,16 @@
       const now = Date.now();
       const lastMinuteSignals = latestSignals.filter((s) => now - s.timestamp <= 60_000);
       const excellentCount = lastMinuteSignals.filter(
-        (s) => (s.probability || 0) >= 0.75
+        (s) => (s.validity_prob || 0) >= 0.75
       ).length;
       const goodCount = lastMinuteSignals.filter(
-        (s) => (s.probability || 0) >= 0.65 && (s.probability || 0) < 0.75
+        (s) => (s.validity_prob || 0) >= 0.65 && (s.validity_prob || 0) < 0.75
       ).length;
 
       signalsSummaryEl.innerHTML = `最近 1 分鐘: <strong>${lastMinuteSignals.length}</strong> 個信號 · <strong>${excellentCount}</strong> 個 EXCELLENT · <strong>${goodCount}</strong> 個 GOOD`;
 
       for (const s of latestSignals) {
-        const prob = s.probability || 0;
+        const prob = s.validity_prob || 0;
         const q = qualityLabel(prob);
 
         if (!activeQualityFilters.has(q)) continue;
@@ -1312,14 +1319,14 @@
         cellSide.textContent = sideDisplay(s.side);
 
         const cellBB = document.createElement("div");
-        cellBB.textContent = s.bb_position || "Near Band";
+        cellBB.textContent = s.bb_position_label || "Middle";
 
         const cellProb = document.createElement("div");
         const probPill = document.createElement("div");
         probPill.className = "score-pill";
         const label = document.createElement("span");
         label.className = "label";
-        label.textContent = "P(success)";
+        label.textContent = "P(valid)";
         const val = document.createElement("span");
         val.className = "value";
         val.textContent = `${Math.round(prob * 100)}%`;
@@ -1339,15 +1346,15 @@
 
         const meta1 = document.createElement("div");
         meta1.className = "meta-chip";
-        meta1.innerHTML = `<span class="key">RSI</span> ${(s.rsi ?? "-")}`;
+        meta1.innerHTML = `<span class="key">RSI</span> ${(s.rsi ?? "-").toFixed(1)}`;
 
         const meta2 = document.createElement("div");
         meta2.className = "meta-chip";
-        meta2.innerHTML = `<span class="key">Vol</span> ${(s.vol_ratio ?? "-")}`;
+        meta2.innerHTML = `<span class="key">Vol</span> ${(s.vol_ratio ?? "-").toFixed(2)}`;
 
         const meta3 = document.createElement("div");
         meta3.className = "meta-chip";
-        meta3.innerHTML = `<span class="key">ADX</span> ${(s.adx ?? "-")}`;
+        meta3.innerHTML = `<span class="key">ADX</span> ${(s.adx ?? "-").toFixed(1)}`;
 
         metaWrap.appendChild(meta1);
         metaWrap.appendChild(meta2);
@@ -1367,10 +1374,51 @@
 
     socket.on("connect", () => {
       systemHealthTextEl.textContent = "所有服務正常";
+      console.log("[socket] Connected");
+      socket.emit("request_symbol_list");  // 請求完整幣種列表
     });
 
     socket.on("disconnect", () => {
       systemHealthTextEl.textContent = "與後端連線中斷";
+    });
+
+    socket.on("symbol_list_response", (data) => {
+      console.log("[socket] Received symbol list:", data.symbols.length, "symbols");
+      allSymbols = data.symbols;
+      
+      // 初始化所有幣種狀態
+      for (const symbol of allSymbols) {
+        if (!symbolsState[symbol]) {
+          symbolsState[symbol] = {
+            symbol: symbol,
+            status: "idle",
+            last_signal: null,
+            active: symbol === "BTCUSDT",  // 預設選擇 BTC
+          };
+        }
+        // 更新狀態
+        if (data.states && data.states[symbol]) {
+          symbolsState[symbol] = {
+            ...symbolsState[symbol],
+            ...data.states[symbol]
+          };
+        }
+      }
+      
+      renderSymbols();
+    });
+
+    socket.on("symbols_state_update", (states) => {
+      // 同步更新所有幣種狀態
+      for (const [symbol, state] of Object.entries(states)) {
+        if (symbolsState[symbol]) {
+          symbolsState[symbol] = {
+            ...symbolsState[symbol],
+            ...state
+          };
+        }
+      }
+      renderSymbols();
     });
 
     socket.on("realtime_signal", (payload) => {
@@ -1378,29 +1426,21 @@
 
       const ts = Date.now();
       const normalized = {
-        symbol: payload.symbol || payload.symbol_id || "UNKNOWN",
-        timeframe: payload.timeframe || payload.tf || "15m",
-        side: (payload.side || payload.direction || "long").toLowerCase(),
-        probability:
-          typeof payload.validity_prob === "number"
-            ? payload.validity_prob
-            : typeof payload.probability === "number"
-            ? payload.probability
-            : 0.5,
-        bb_position: payload.bb_position_label || payload.bb_zone || "middle",
+        symbol: payload.symbol || "UNKNOWN",
+        timeframe: payload.timeframe || "15m",
+        side: (payload.side || "long").toLowerCase(),
+        validity_prob: payload.validity_prob || 0,
+        bb_position_label: payload.bb_position_label || "Middle",
         rsi: payload.rsi,
         adx: payload.adx,
         vol_ratio: payload.vol_ratio,
-        timestamp: ts,
-        ts_raw: payload.timestamp || null,
+        timestamp: payload.timestamp || ts,
       };
 
-      symbolsState[normalized.symbol] = {
-        symbol: normalized.symbol,
-        timeframe: normalized.timeframe,
-        lastSignal: normalized,
-        active: symbolsState[normalized.symbol]?.active || false,
-      };
+      // 更新所有幣種的 last_signal
+      if (symbolsState[normalized.symbol]) {
+        symbolsState[normalized.symbol].last_signal = normalized;
+      }
 
       latestSignals.unshift(normalized);
       latestSignals = latestSignals.filter((s) => ts - s.timestamp <= 5 * 60_000);
@@ -1413,9 +1453,9 @@
       paused = !paused;
       const btn = document.getElementById("toggle-pause");
       if (paused) {
-        btn.innerHTML = "<span>▶ 恢復實時更新</span>";
+        btn.innerHTML = "<span>\u25b6 恢復實時更新</span>";
       } else {
-        btn.innerHTML = "<span>⏸ 暫停實時更新</span>";
+        btn.innerHTML = "<span>\u23f8 暫停實時更新</span>";
       }
     });
 
@@ -1461,42 +1501,6 @@
       }
       renderSymbols();
     });
-
-    const initialSymbols = [
-      "BTCUSDT",
-      "ETHUSDT",
-      "BNBUSDT",
-      "SOLUSDT",
-      "XRPUSDT",
-      "DOGEUSDT",
-      "ADAUSDT",
-      "AVAXUSDT",
-      "TONUSDT",
-      "LINKUSDT",
-      "OPUSDT",
-      "ARBUSDT",
-      "SUIUSDT",
-      "APEUSDT",
-      "MATICUSDT",
-      "LTCUSDT",
-      "TRXUSDT",
-      "FTMUSDT",
-      "INJUSDT",
-      "SEIUSDT",
-      "TIAUSDT",
-      "ORDIUSDT",
-    ];
-
-    for (const sym of initialSymbols) {
-      symbolsState[sym] = {
-        symbol: sym,
-        timeframe: "15m",
-        lastSignal: null,
-        active: sym === "BTCUSDT",
-      };
-    }
-
-    renderSymbols();
   </script>
 </body>
 </html>
