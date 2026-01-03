@@ -722,7 +722,7 @@
             <div class="status-info">
                 <div class="status-item">
                     <div class="status-dot"></div>
-                    <span>API 連接: <span id="api-status">就緘</span></span>
+                    <span>API 連接: <span id="api-status">就緒</span></span>
                 </div>
                 <div class="status-item">
                     <span id="last-update">最後更新: --:--:--</span>
@@ -752,12 +752,12 @@
                             <option value="BTCUSDT">比特幣 (BTCUSDT)</option>
                             <option value="ETHUSDT">以太坊 (ETHUSDT)</option>
                             <option value="BNBUSDT">幣安幣 (BNBUSDT)</option>
-                            <option value="ADAUSDT">卡爾達誾 (ADAUSDT)</option>
+                            <option value="ADAUSDT">卡爾達諾 (ADAUSDT)</option>
                             <option value="XRPUSDT">瑞波 (XRPUSDT)</option>
                             <option value="DOGEUSDT">狗狗幣 (DOGEUSDT)</option>
                             <option value="SOLUSDT">索拉納 (SOLUSDT)</option>
                             <option value="LTCUSDT">萊特幣 (LTCUSDT)</option>
-                            <option value="AVAXUSDT">雪崧 (AVAXUSDT)</option>
+                            <option value="AVAXUSDT">雪崩 (AVAXUSDT)</option>
                             <option value="LINKUSDT">鏈環 (LINKUSDT)</option>
                             <option value="UNIUSDT">Uniswap (UNIUSDT)</option>
                             <option value="ATOMUSDT">Cosmos (ATOMUSDT)</option>
@@ -819,7 +819,7 @@
         </div>
     </div>
 
-    <!-- 頁艵 -->
+    <!-- 頁腳 -->
     <div style="text-align: center; padding: 30px; color: #80d0d8; font-size: 12px; border-top: 1px solid rgba(0, 188, 212, 0.2);">
         <p>BB 反彈實時監控系統 V5 正式版</p>
         <p style="margin-top: 8px; opacity: 0.7;">布林通道直接計算 | 接近程度實時預警 | 機器學習輔助判斷</p>
@@ -874,26 +874,26 @@
             document.getElementById('update-interval').textContent = `更新間隔: ${updateCounter}秒`;
         }
 
-        async function fetchOHLCV(symbol, timeframe) {
+        // 後端只需要 symbol 和 timeframe，不需要前端傳價格
+        async function fetchPrediction(symbol, timeframe) {
             try {
-                const response = await fetch(
-                    `${BINANCE_API}/klines?symbol=${symbol}&interval=${timeframe}&limit=1`
-                );
+                addDebugLog(`[分析] 向後端請求 ${symbol} ${timeframe}`);
+                const response = await fetch(`${API_BASE}/predict`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        timeframe: timeframe
+                        // ✅ 不傳 ohlcv，後端會自己從 Binance 獲取完整歷史數據
+                    })
+                });
+
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
                 const data = await response.json();
-                if (data && data.length > 0) {
-                    const kline = data[0];
-                    const ohlcv = {
-                        open: parseFloat(kline[1]),
-                        high: parseFloat(kline[2]),
-                        low: parseFloat(kline[3]),
-                        close: parseFloat(kline[4]),
-                        volume: parseFloat(kline[7])
-                    };
-                    return ohlcv;
-                }
-                return null;
+                return data;
             } catch (error) {
-                addDebugLog(`[Binance] ${symbol} 市場數據獲取失敗: ${error.message}`, 'error');
+                addDebugLog(`[Binance] ${symbol} 預測請求失敗: ${error.message}`, 'error');
                 return null;
             }
         }
@@ -933,30 +933,15 @@
             addDebugLog(`[分析] 更新 ${symbol} ${timeframe}`, 'info');
             
             try {
-                const ohlcv = await fetchOHLCV(symbol, timeframe);
-                if (!ohlcv) {
-                    addDebugLog(`[錯誤] 無法獲取 ${symbol} 市場數據`, 'error');
+                const data = await fetchPrediction(symbol, timeframe);
+                if (!data) {
+                    addDebugLog(`[錯誤] 無法獲取 ${symbol} 預測數據`, 'error');
                     return;
                 }
-
-                const response = await fetch(`${API_BASE}/predict`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        symbol: symbol,
-                        timeframe: timeframe,
-                        ohlcv: ohlcv
-                    })
-                });
-
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-                const data = await response.json();
                 
                 const bb = data.bb_touch;
                 addDebugLog(`[布林通道] 狀態=${bb.status}, 方向=${bb.direction}, 距離=${bb.distance_percent.toFixed(8)}%`, 'info');
                 addDebugLog(`[軌道位置] 上軌=${bb.bb_upper ? bb.bb_upper.toFixed(2) : 'null'}, 中線=${bb.bb_middle ? bb.bb_middle.toFixed(2) : 'null'}, 下軌=${bb.bb_lower ? bb.bb_lower.toFixed(2) : 'null'}`, 'info');
-                addDebugLog(`[現價] ${ohlcv.close.toFixed(2)}`, 'info');
                 
                 if (data.validity) {
                     addDebugLog(`[有效性] 概率=${(data.validity.probability || 0).toFixed(1)}%, 評級=${data.validity.quality}`, 'success');
@@ -965,14 +950,14 @@
                     addDebugLog(`[波動性] 預測值=${(data.volatility.predicted_vol || 0).toFixed(2)}, 強度=${(data.volatility.expansion_strength || 0).toFixed(2)}`, 'success');
                 }
                 
-                renderDetailPanel(data, symbol, timeframe, ohlcv);
+                renderDetailPanel(data, symbol, timeframe);
                 updateTimestamp();
             } catch (error) {
                 addDebugLog(`[錯誤] ${error.message}`, 'error');
             }
         }
 
-        function renderDetailPanel(data, symbol, timeframe, ohlcv) {
+        function renderDetailPanel(data, symbol, timeframe) {
             const bb = data.bb_touch;
             const status = bb.status || 'normal';
             const direction = bb.direction;
@@ -1108,10 +1093,6 @@
                         <div class="detail-label">時間週期</div>
                         <div class="detail-value">${timeframe}</div>
                     </div>
-                    <div class="detail-item">
-                        <div class="detail-label">現價 (收盤價)</div>
-                        <div class="detail-value" style="color: #4dd0e1;">${ohlcv.close.toFixed(2)}</div>
-                    </div>
                     ${bb.bb_upper ? `
                         <div class="detail-item">
                             <div class="detail-label">布林上軌</div>
@@ -1143,21 +1124,10 @@
                 let critical_count = 0;
                 
                 for (const symbol of SYMBOLS) {
-                    const ohlcv = await fetchOHLCV(symbol, '15m');
-                    if (!ohlcv) continue;
+                    const data = await fetchPrediction(symbol, '15m');
+                    if (!data) continue;
 
-                    const response = await fetch(`${API_BASE}/predict`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            symbol: symbol,
-                            timeframe: '15m',
-                            ohlcv: ohlcv
-                        })
-                    });
-
-                    const data = await response.json();
-                    const card = renderSymbolCard(data, symbol, ohlcv);
+                    const card = renderSymbolCard(data, symbol);
                     html += card.html;
                     if (card.critical) critical_count++;
                 }
@@ -1170,7 +1140,7 @@
             }
         }
 
-        function renderSymbolCard(data, symbol, ohlcv) {
+        function renderSymbolCard(data, symbol) {
             const bb = data.bb_touch;
             const status = bb.status || 'normal';
             const direction = bb.direction;
@@ -1227,8 +1197,8 @@
                             <div class="symbol-bb-value">${parseFloat(bb.bb_lower).toFixed(0)}</div>
                         </div>
                         <div class="symbol-bb-item">
-                            <div class="symbol-bb-label">現價</div>
-                            <div class="symbol-bb-value">${ohlcv.close.toFixed(0)}</div>
+                            <div class="symbol-bb-label">[預測K棒]</div>
+                            <div class="symbol-bb-value" style="font-size: 10px;">${bb.kline_status}</div>
                         </div>
                     </div>
                 `;
