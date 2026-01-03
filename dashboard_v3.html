@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BB反彈ML系統 - 實時監控 V3</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --color-primary: #3b82f6;
+            --color-success: #10b981;
+            --color-warning: #f59e0b;
+            --color-danger: #ef4444;
+            --color-dark: #1f2937;
+            --color-light: #f3f4f6;
+            --color-text: #111827;
+            --shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            color: var(--color-text);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 20px 0;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow);
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .header-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .status-badge.online {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-badge.offline {
+            background: #fee2e2;
+            color: #7f1d1d;
+        }
+
+        .control-panel {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        label {
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        select, input {
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+            background: white;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--color-primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+
+        .btn-primary:active {
+            transform: translateY(1px);
+        }
+
+        .btn-secondary {
+            background: #e5e7eb;
+            color: var(--color-text);
+        }
+
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: var(--shadow);
+            transition: box-shadow 0.2s;
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow-lg);
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f3f4f6;
+        }
+
+        .card-content {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+        }
+
+        .metric-label {
+            font-size: 13px;
+            color: #6b7280;
+            font-weight: 500;
+        }
+
+        .metric-value {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .signal-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .signal-indicator.buy { background: var(--color-success); }
+        .signal-indicator.sell { background: var(--color-danger); }
+        .signal-indicator.neutral { background: #9ca3af; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .three-layer-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .layer-card {
+            background: white;
+            border-left: 4px solid var(--color-primary);
+            border-radius: 6px;
+            padding: 20px;
+            box-shadow: var(--shadow);
+        }
+
+        .layer-card.layer-1 { border-left-color: #3b82f6; }
+        .layer-card.layer-2 { border-left-color: #8b5cf6; }
+        .layer-card.layer-3 { border-left-color: #ec4899; }
+
+        .layer-title {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin-bottom: 15px;
+        }
+
+        .layer-content {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-key {
+            font-size: 13px;
+            color: #6b7280;
+            font-weight: 500;
+        }
+
+        .result-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .quality-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .quality-badge.excellent {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .quality-badge.good {
+            background: #dbeafe;
+            color: #0c4a6e;
+        }
+
+        .quality-badge.moderate {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .quality-badge.weak {
+            background: #fecaca;
+            color: #7f1d1d;
+        }
+
+        .quality-badge.poor {
+            background: #fecaca;
+            color: #7f1d1d;
+        }
+
+        .results-table {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            margin-top: 30px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: #f9fafb;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        th {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 13px;
+            font-weight: 600;
+            color: #6b7280;
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #f3f4f6;
+            font-size: 14px;
+        }
+
+        tbody tr:hover {
+            background: #f9fafb;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .signal-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .signal-badge.strong-buy {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .signal-badge.buy {
+            background: #bfdbfe;
+            color: #0c2d6b;
+        }
+
+        .signal-badge.hold {
+            background: #fef3c7;
+            color: #78350f;
+        }
+
+        .signal-badge.sell {
+            background: #fecaca;
+            color: #7f1d1d;
+        }
+
+        .signal-badge.strong-sell {
+            background: #fca5a5;
+            color: #7f1d1d;
+        }
+
+        .signal-badge.neutral {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .confidence-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .bar-background {
+            flex: 1;
+            height: 6px;
+            background: #e5e7eb;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6 0%, #10b981 100%);
+            transition: width 0.3s ease;
+        }
+
+        .bar-value {
+            font-size: 12px;
+            font-weight: 600;
+            color: #6b7280;
+            min-width: 35px;
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .spinner {
+            width: 8px;
+            height: 8px;
+            background: var(--color-primary);
+            border-radius: 50%;
+            animation: bounce 1.4s infinite;
+        }
+
+        .spinner:nth-child(2) { animation-delay: 0.2s; }
+        .spinner:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .alert.success {
+            background: #d1fae5;
+            color: #065f46;
+            border-left: 4px solid #10b981;
+        }
+
+        .alert.error {
+            background: #fee2e2;
+            color: #7f1d1d;
+            border-left: 4px solid #ef4444;
+        }
+
+        .alert.info {
+            background: #dbeafe;
+            color: #0c2d6b;
+            border-left: 4px solid #3b82f6;
+        }
+
+        @media (max-width: 768px) {
+            .main-grid, .three-layer-results {
+                grid-template-columns: 1fr;
+            }
+
+            .header-info {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .control-panel {
+                width: 100%;
+            }
+
+            table {
+                font-size: 12px;
+            }
+
+            th, td {
+                padding: 8px 12px;
+            }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #9ca3af;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .footer {
+            text-align: center;
+            color: #9ca3af;
+            font-size: 12px;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-info">
+                <div>
+                    <h1>BB反彈ML系統 - 實時監控 V3</h1>
+                    <p style="color: #6b7280; font-size: 14px;">三層模型整合：BB觸及檢測 成 有效性判別 成 波動性預測</p>
+                </div>
+                <div>
+                    <span id="status" class="status-badge online">
+                        <span style="display: inline-block; width: 8px; height: 8px; background: #10b981; border-radius: 50%; margin-right: 6px; vertical-align: middle;"></span>
+                        線上
+                    </span>
+                </div>
+            </div>
+
+            <div class="control-panel" style="margin-top: 20px;">
+                <div class="input-group">
+                    <label for="symbol">幣種</label>
+                    <select id="symbol">
+                        <option value="BTCUSDT">BTC/USDT</option>
+                        <option value="ETHUSDT">ETH/USDT</option>
+                        <option value="BNBUSDT">BNB/USDT</option>
+                        <option value="ADAUSDT">ADA/USDT</option>
+                        <option value="XRPUSDT">XRP/USDT</option>
+                        <option value="SOLUSDT">SOL/USDT</option>
+                        <option value="DOGEUSDT">DOGE/USDT</option>
+                        <option value="LTCUSDT">LTC/USDT</option>
+                        <option value="AVAXUSDT">AVAX/USDT</option>
+                        <option value="LINKUSDT">LINK/USDT</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label for="timeframe">時框</label>
+                    <select id="timeframe">
+                        <option value="15m">15分鐘</option>
+                        <option value="1h">1小時</option>
+                    </select>
+                </div>
+
+                <button class="btn-primary" onclick="runPrediction()">運行預測</button>
+                <button class="btn-secondary" onclick="clearResults()">清除結果</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div id="alertContainer"></div>
+
+        <div id="resultsContainer" style="display: none;">
+            <div class="main-grid">
+                <div class="card">
+                    <div class="card-title">快速摘要</div>
+                    <div class="card-content">
+                        <div class="metric">
+                            <span class="metric-label">幣種</span>
+                            <span class="metric-value" id="summarySymbol">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">時框</span>
+                            <span class="metric-value" id="summaryTimeframe">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">交易信號</span>
+                            <span id="summarySignal" style="display: flex; align-items: center;"></span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">信心度</span>
+                            <div class="confidence-bar">
+                                <div class="bar-background">
+                                    <div class="bar-fill" id="confidenceBar" style="width: 0%"></div>
+                                </div>
+                                <span class="bar-value" id="confidenceValue">0%</span>
+                            </div>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">更新時間</span>
+                            <span class="metric-value" id="summaryTime">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="three-layer-results">
+                <div class="layer-card layer-1">
+                    <div class="layer-title">層級1: BB觸及檢測</div>
+                    <div class="layer-content">
+                        <div class="result-item">
+                            <span class="result-key">是否觸及</span>
+                            <span class="result-value" id="bbTouched">-</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-key">觸及位置</span>
+                            <span class="result-value" id="bbTouchType">-</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-key">信心度</span>
+                            <span class="result-value" id="bbConfidence">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="layer-card layer-2">
+                    <div class="layer-title">層級2: 有效性判別</div>
+                    <div class="layer-content">
+                        <div class="result-item">
+                            <span class="result-key">有效反彈</span>
+                            <span class="result-value" id="validValid">-</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-key">概率</span>
+                            <span class="result-value" id="validProbability">-</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-key">等級</span>
+                            <span id="validQuality"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="layer-card layer-3">
+                    <div class="layer-title">層級3: 波動性預測</div>
+                    <div class="layer-content">
+                        <div class="result-item">
+                            <span class="result-key">預測波動性</span>
+                            <span class="result-value" id="volPredicted">-</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-key">會擴張</span>
+                            <span class="result-value" id="volExpand">-</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-key">擴張強度</span>
+                            <span class="result-value" id="volStrength">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="results-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>指標</th>
+                            <th>值</th>
+                            <th>說明</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detailsTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="emptyState" class="empty-state">
+            <div class="empty-state-icon">選擇幣種和時框，點擊「運行預測」以查看結果</div>
+        </div>
+    </div>
+
+    <div class="container footer">
+        <p>BB反彈ML系統 V3.0 - 實時監控面板 - 構建於 Flask 成 機器學習</p>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000';
+        const DEFAULT_OHLCV = {
+            open: 45000,
+            high: 45500,
+            low: 44900,
+            close: 45200,
+            volume: 1000000
+        };
+
+        function showAlert(message, type = 'info') {
+            const alertContainer = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert ${type}`;
+            alert.textContent = message;
+            alertContainer.appendChild(alert);
+            setTimeout(() => alert.remove(), 5000);
+        }
+
+        async function runPrediction() {
+            const symbol = document.getElementById('symbol').value;
+            const timeframe = document.getElementById('timeframe').value;
+
+            try {
+                const resultsContainer = document.getElementById('resultsContainer');
+                const emptyState = document.getElementById('emptyState');
+                resultsContainer.innerHTML = '<div class="loading"><span class="spinner"></span><span class="spinner"></span><span class="spinner"></span></div>';
+                resultsContainer.style.display = 'block';
+                emptyState.style.display = 'none';
+
+                const response = await fetch(`${API_BASE}/predict`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        timeframe: timeframe,
+                        ohlcv: DEFAULT_OHLCV
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API錯誤: ${response.status}`);
+                }
+
+                const data = await response.json();
+                displayResults(data);
+                showAlert(`${symbol} ${timeframe} 預測完成`, 'success');
+
+            } catch (error) {
+                console.error('預測失敗:', error);
+                showAlert(`錯誤: ${error.message}`, 'error');
+                document.getElementById('resultsContainer').style.display = 'none';
+                document.getElementById('emptyState').style.display = 'block';
+            }
+        }
+
+        function displayResults(data) {
+            document.getElementById('summarySymbol').textContent = data.symbol;
+            document.getElementById('summaryTimeframe').textContent = data.timeframe;
+            
+            const signalElement = document.getElementById('summarySignal');
+            signalElement.innerHTML = `
+                <span class="signal-indicator ${getSignalClass(data.signal)}"></span>
+                <span class="signal-badge ${getSignalClass(data.signal)}">${data.signal}</span>
+            `;
+
+            const confidence = Math.round(data.confidence * 100);
+            document.getElementById('confidenceBar').style.width = `${confidence}%`;
+            document.getElementById('confidenceValue').textContent = `${confidence}%`;
+
+            document.getElementById('summaryTime').textContent = new Date(data.timestamp).toLocaleTimeString('zh-TW');
+
+            if (data.bb_touch) {
+                document.getElementById('bbTouched').textContent = data.bb_touch.touched ? '是' : '否';
+                document.getElementById('bbTouchType').textContent = {
+                    'upper': '上軌',
+                    'lower': '下軌',
+                    'none': '無'
+                }[data.bb_touch.touch_type] || '未知';
+                document.getElementById('bbConfidence').textContent = `${Math.round(data.bb_touch.confidence * 100)}%`;
+            }
+
+            if (data.validity) {
+                document.getElementById('validValid').textContent = data.validity.valid ? '是' : '否';
+                document.getElementById('validProbability').textContent = `${Math.round(data.validity.probability)}%`;
+                document.getElementById('validQuality').innerHTML = 
+                    `<span class="quality-badge ${data.validity.quality}">${data.validity.quality.toUpperCase()}</span>`;
+            }
+
+            if (data.volatility) {
+                document.getElementById('volPredicted').textContent = data.volatility.predicted_vol.toFixed(3);
+                document.getElementById('volExpand').textContent = data.volatility.will_expand ? '會' : '不會';
+                document.getElementById('volStrength').textContent = `${Math.round(data.volatility.expansion_strength * 100)}%`;
+            }
+
+            const tableBody = document.getElementById('detailsTableBody');
+            tableBody.innerHTML = `
+                <tr>
+                    <td>幣種/時框</td>
+                    <td>${data.symbol} / ${data.timeframe}</td>
+                    <td>交易對和時間框架</td>
+                </tr>
+                <tr>
+                    <td>交易信號</td>
+                    <td><span class="signal-badge ${getSignalClass(data.signal)}">${data.signal}</span></td>
+                    <td>基於三層模型的綜合信號</td>
+                </tr>
+                <tr>
+                    <td>BB觸及信心度</td>
+                    <td>${Math.round((data.bb_touch?.confidence || 0) * 100)}%</td>
+                    <td>位置分類器的信心度</td>
+                </tr>
+                <tr>
+                    <td>有效性概率</td>
+                    <td>${Math.round((data.validity?.probability || 0))}%</td>
+                    <td>反彈有效性的概率</td>
+                </tr>
+                <tr>
+                    <td>波動性預測</td>
+                    <td>${(data.volatility?.predicted_vol || 0).toFixed(3)}</td>
+                    <td>預測的波動性倍數</td>
+                </tr>
+                <tr>
+                    <td>整體信心度</td>
+                    <td>${Math.round(data.confidence * 100)}%</td>
+                    <td>三層模型加權平均信心度</td>
+                </tr>
+            `;
+
+            document.getElementById('resultsContainer').style.display = 'block';
+        }
+
+        function getSignalClass(signal) {
+            const signalLower = signal.toLowerCase();
+            if (signalLower.includes('strong_buy')) return 'strong-buy';
+            if (signalLower.includes('strong_sell')) return 'strong-sell';
+            return signalLower.replace(/_/g, '-');
+        }
+
+        function clearResults() {
+            document.getElementById('resultsContainer').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'block';
+            document.getElementById('alertContainer').innerHTML = '';
+        }
+
+        async function checkHealth() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('status').className = 'status-badge online';
+                    document.getElementById('status').innerHTML = `
+                        <span style="display: inline-block; width: 8px; height: 8px; background: #10b981; border-radius: 50%; margin-right: 6px; vertical-align: middle;"></span>
+                        線上 (${data.models_loaded.bb_models}個模型)
+                    `;
+                } else {
+                    throw new Error('健康檢查失敗');
+                }
+            } catch (error) {
+                document.getElementById('status').className = 'status-badge offline';
+                document.getElementById('status').innerHTML = `
+                    <span style="display: inline-block; width: 8px; height: 8px; background: #ef4444; border-radius: 50%; margin-right: 6px; vertical-align: middle;"></span>
+                    離線
+                `;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            checkHealth();
+            setInterval(checkHealth, 30000);
+        });
+    </script>
+</body>
+</html>
