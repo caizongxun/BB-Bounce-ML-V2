@@ -363,6 +363,116 @@
             background: linear-gradient(90deg, #4caf50, #81c784);
         }
 
+        /* 模型預測結果 */
+        .model-results {
+            background: rgba(30, 30, 30, 0.6);
+            border: 2px solid #00bcd4;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 30px;
+        }
+
+        .model-results.no-data {
+            border-color: rgba(0, 188, 212, 0.3);
+            opacity: 0.6;
+        }
+
+        .model-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #00bcd4;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .model-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .model-card {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(0, 188, 212, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .model-card.validity {
+            border-left: 4px solid #4caf50;
+        }
+
+        .model-card.volatility {
+            border-left: 4px solid #ff9800;
+        }
+
+        .model-card-title {
+            font-size: 12px;
+            color: #80d0d8;
+            text-transform: uppercase;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .model-metric {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-bottom: 10px;
+        }
+
+        .model-metric-label {
+            font-size: 10px;
+            color: #a0a0a0;
+            text-transform: uppercase;
+        }
+
+        .model-metric-value {
+            font-size: 16px;
+            font-weight: 700;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+        }
+
+        .model-card.validity .model-metric-value {
+            color: #4caf50;
+        }
+
+        .model-card.volatility .model-metric-value {
+            color: #ff9800;
+        }
+
+        .quality-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-top: 8px;
+        }
+
+        .quality-excellent {
+            background: rgba(76, 175, 80, 0.2);
+            color: #81c784;
+        }
+
+        .quality-good {
+            background: rgba(33, 150, 243, 0.2);
+            color: #64b5f6;
+        }
+
+        .quality-moderate {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffb74d;
+        }
+
+        .quality-weak {
+            background: rgba(244, 67, 54, 0.2);
+            color: #ef5350;
+        }
+
         /* 所有幣種網格 */
         .symbols-grid {
             display: grid;
@@ -585,6 +695,10 @@
                 grid-template-columns: 1fr;
             }
 
+            .model-grid {
+                grid-template-columns: 1fr;
+            }
+
             .tab-button {
                 padding: 12px 20px;
                 font-size: 13px;
@@ -693,7 +807,7 @@
         </div>
     </div>
 
-    <!-- 頁腳 -->
+    <!-- 頁艵 -->
     <div style="text-align: center; padding: 30px; color: #80d0d8; font-size: 12px; border-top: 1px solid rgba(0, 188, 212, 0.2);">
         <p>BB 反彈實時監控系統 V5 正式版</p>
         <p style="margin-top: 8px; opacity: 0.7;">布林通道直接計算 | 接近程度實時預警 | 機料学習輔助判斷</p>
@@ -808,6 +922,13 @@
                 const bb = data.bb_touch;
                 addDebugLog(`[布林通道] 狀態=${bb.status}, 方向=${bb.direction}, 距離=${bb.distance_percent.toFixed(3)}%`, 'info');
                 
+                if (data.validity) {
+                    addDebugLog(`[有效性] 概率=${(data.validity.probability || 0).toFixed(1)}%, 質量=${data.validity.quality}`, 'info');
+                }
+                if (data.volatility) {
+                    addDebugLog(`[波動性] 予測值=${(data.volatility.predicted_vol || 0).toFixed(2)}, 伸張強度=${(data.volatility.expansion_strength || 0).toFixed(2)}`, 'info');
+                }
+                
                 container.innerHTML = renderDetailPanel(data, symbol, timeframe, ohlcv);
                 updateTimestamp();
             } catch (error) {
@@ -824,15 +945,16 @@
             const warning = bb.warning_level || 'none';
 
             let sectionClass = 'safe';
-            if (warning === 'danger') sectionClass = 'danger';
+            if (warning === 'danger' || distance <= 0.2) sectionClass = 'danger';
             else if (warning === 'warning') sectionClass = 'warning';
             else if (warning === 'caution') sectionClass = 'warning';
 
             let statusText = '正常';
             let directionText = '';
-            if (status === 'touched') {
+            if (status === 'touched' || distance <= 0.2) {
                 statusText = '觸及邊界';
                 directionText = direction === 'upper' ? '上軌' : '下軌';
+                sectionClass = 'danger';
             } else if (status === 'approaching') {
                 statusText = '接近預警';
                 directionText = direction === 'upper' ? '上軌' : '下軌';
@@ -868,11 +990,95 @@
                                 </div>
                             </div>
                             <div class="approaching-label" style="margin-top: 12px;">風險計稜</div>
-                            <div class="approaching-value" style="font-size: 14px;">${warningTextMap[warning]}</div>
+                            <div class="approaching-value" style="font-size: 14px;">${distance <= 0.2 ? '危險等級 - 已接近邊界' : warningTextMap[warning]}</div>
                         </div>
                     </div>
                 </div>
             `;
+
+            // 模型預測結果
+            let modelHTML = '';
+            if (bb.status === 'approaching' || bb.status === 'touched' || distance <= 0.2) {
+                const validity = data.validity;
+                const volatility = data.volatility;
+
+                modelHTML = `
+                    <div class="model-results">
+                        <div class="model-title">機料学習輔助判斷結果</div>
+                        <div class="model-grid">
+                `;
+
+                if (validity) {
+                    const qualityClass = `quality-${validity.quality}`;
+                    modelHTML += `
+                        <div class="model-card validity">
+                            <div class="model-card-title">上下軌有效性</div>
+                            <div class="model-metric">
+                                <div class="model-metric-label">有效性概率</div>
+                                <div class="model-metric-value">${(validity.probability || 0).toFixed(1)}%</div>
+                            </div>
+                            <div class="model-metric">
+                                <div class="model-metric-label">評繼等級</div>
+                                <div class="quality-badge ${qualityClass}">${validity.quality}</div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    modelHTML += `
+                        <div class="model-card validity" style="opacity: 0.5;">
+                            <div class="model-card-title">上下軌有效性</div>
+                            <div class="model-metric">
+                                <div class="model-metric-label">狀態</div>
+                                <div style="color: #a0a0a0; font-size: 12px;">模型不可用</div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                if (volatility) {
+                    modelHTML += `
+                        <div class="model-card volatility">
+                            <div class="model-card-title">未來波動性</div>
+                            <div class="model-metric">
+                                <div class="model-metric-label">波動性水准</div>
+                                <div class="model-metric-value">${(volatility.predicted_vol || 0).toFixed(2)}x</div>
+                            </div>
+                            <div class="model-metric">
+                                <div class="model-metric-label">伸張強度</div>
+                                <div class="model-metric-value">${(volatility.expansion_strength || 0).toFixed(2)}</div>
+                            </div>
+                            <div class="model-metric">
+                                <div class="model-metric-label">尼佐伏特等級</div>
+                                <div style="color: #ff9800; font-size: 12px; text-transform: uppercase; font-weight: 700;">${volatility.volatility_level}</div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    modelHTML += `
+                        <div class="model-card volatility" style="opacity: 0.5;">
+                            <div class="model-card-title">未來波動性</div>
+                            <div class="model-metric">
+                                <div class="model-metric-label">狀態</div>
+                                <div style="color: #a0a0a0; font-size: 12px;">模型不可用</div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                modelHTML += `
+                        </div>
+                    </div>
+                `;
+            } else {
+                modelHTML = `
+                    <div class="model-results no-data">
+                        <div class="model-title">機料学習輔助判斷結果</div>
+                        <div style="padding: 20px; text-align: center; color: #80d0d8;">
+                            詳戈未接近邊界、模型求評变不起
+                        </div>
+                    </div>
+                `;
+            }
 
             return `
                 <div class="detail-grid">
@@ -904,12 +1110,13 @@
                     ` : ''}
                 </div>
                 ${approachingHTML}
+                ${modelHTML}
             `;
         }
 
         async function updateAllSymbols() {
             const container = document.getElementById('symbols-container');
-            addDebugLog('[实斶監控] 開始更新全市場数据', 'info');
+            addDebugLog('[實時監控] 開始更新全市場数据', 'info');
             
             try {
                 let html = '';
@@ -954,7 +1161,8 @@
             let statusText = '正常';
             let isCritical = false;
             
-            if (warning === 'danger') {
+            // 警警: 0%或钱敬死岋懂惣加起警告等級
+            if (warning === 'danger' || distance <= 0.2) {
                 cardClass += ' danger';
                 statusText = '危險';
                 isCritical = true;
