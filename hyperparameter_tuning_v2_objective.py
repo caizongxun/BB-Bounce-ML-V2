@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-超參数調整器 - 客觀公式版本
+超參數調整器 - 客觀公式版本
 
-为每个币种新找最优的 XGBoost 超參数
+為每個币种新找最優的 XGBoost 超參數
 使用 Grid Search 不是 Optuna（旨在控制耗時）
 """
 
@@ -17,8 +18,13 @@ from sklearn.metrics import precision_score, recall_score
 from xgboost import XGBClassifier
 import warnings
 import json
+import io
+import sys
 
 warnings.filterwarnings("ignore")
+
+# 修複 Windows Unicode 編碼
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -28,14 +34,14 @@ logger = logging.getLogger(__name__)
 try:
     from data_loader import CryptoDataLoader
 except ImportError:
-    logger.error("找不到 data_loader")
+    logger.error("[ERROR] Cannot find data_loader")
     exit(1)
 
 from train_bb_band_v2_objective_formula import BBContractionFeatureExtractorV3_Objective
 
 
 class HyperparameterTunerV2_Objective:
-    """超參数調整器 - 客觀公式版本"""
+    """超參數調整器 - 客觀公式版本"""
 
     def __init__(self, output_dir="hyperparameter_tuning_v2_objective"):
         self.output_dir = Path(output_dir)
@@ -43,16 +49,16 @@ class HyperparameterTunerV2_Objective:
         self.loader = CryptoDataLoader()
 
     def prepare_data(self, symbol: str, timeframe: str):
-        """渆整訓練數據"""
-        logger.info(f"🔧 渆整 {symbol} {timeframe} 數據...")
+        """準備訓練數據"""
+        logger.info(f"[PREPARE] Preparing {symbol} {timeframe} data...")
 
-        # 下載数据
+        # 下載數据
         df = self.loader.download_symbol_data(symbol, timeframe)
         if df is None or len(df) < 100:
-            logger.error(f"{symbol} {timeframe} 數據不足")
+            logger.error(f"[ERROR] {symbol} {timeframe} - Insufficient data")
             return None, None, None, None
 
-        # 提取特征（使用客觀公式）
+        # 提取特徵（使用客觀公式）
         extractor = BBContractionFeatureExtractorV3_Objective()
         df = extractor.create_features(df, timeframe=timeframe, lookahead=5)
 
@@ -60,7 +66,7 @@ class HyperparameterTunerV2_Objective:
         df_labeled = df[df["label_bounce_valid"] != -1].copy()
 
         if len(df_labeled) < 50:
-            logger.error(f"{symbol} {timeframe} 有效樣本不足")
+            logger.error(f"[ERROR] {symbol} {timeframe} - Insufficient labeled samples")
             return None, None, None, None
 
         # 特征選擇
@@ -79,18 +85,18 @@ class HyperparameterTunerV2_Objective:
         X = X.fillna(0)
 
         if len(X) < 30:
-            logger.error(f"{symbol} {timeframe} 數據不足")
+            logger.error(f"[ERROR] {symbol} {timeframe} - Insufficient samples after cleaning")
             return None, None, None, None
 
-        logger.info(f"✅ 有效樣本: {len(X):,}")
+        logger.info(f"[OK] Valid samples: {len(X):,}")
 
         return X, y, feature_cols, df
 
     def tune_grid_search(self, symbol: str, timeframe: str):
-        """使用 Grid Search 進行超參数調整"""
-        logger.info(f"💎 Grid Search 棧達超參数...")
+        """使用 Grid Search 進行超參數調整"""
+        logger.info(f"[TUNING] Grid Search Hyperparameter Tuning...")
 
-        # 渆整數据
+        # 準備数据
         X, y, feature_cols, df = self.prepare_data(symbol, timeframe)
         if X is None:
             return None, None
@@ -123,8 +129,8 @@ class HyperparameterTunerV2_Objective:
         best_params = None
         trial_count = 0
 
-        # 简化網格（只测试最重要的參数）
-        logger.info("简化 Grid Search（測试关键參数）...")
+        # 简化網格（只测試最重要的參數）
+        logger.info("[GRID] Simplified Grid Search (testing key parameters)...")
 
         simplified_grid = {
             "n_estimators": [100, 200, 250],
@@ -161,20 +167,20 @@ class HyperparameterTunerV2_Objective:
             score = 0.7 * precision + 0.3 * recall
 
             logger.info(
-                f"[{trial_count}] n_est={params['n_estimators']}, depth={params['max_depth']}, lr={params['learning_rate']:.2f} => 分數={score:.4f}"
+                f"[TRIAL {trial_count}] n_est={params['n_estimators']}, depth={params['max_depth']}, lr={params['learning_rate']:.2f} => Score={score:.4f}"
             )
 
             if score > best_score:
                 best_score = score
                 best_params = params.copy()
 
-        logger.info(f"🔍 最优超參数: {best_params}")
-        logger.info(f"🔍 最优分数: {best_score:.4f}")
+        logger.info(f"[BEST] Best hyperparameters: {best_params}")
+        logger.info(f"[BEST] Best score: {best_score:.4f}")
 
         return best_params, best_score
 
     def save_best_params(self, symbol: str, timeframe: str, params: dict, score: float):
-        """保存最优超參数"""
+        """保存最優超參數"""
         results_file = (
             self.output_dir / f"{symbol}_{timeframe}_best_params.json"
         )
@@ -190,25 +196,25 @@ class HyperparameterTunerV2_Objective:
         with open(results_file, "w") as f:
             json.dump(data, f, indent=2)
 
-        logger.info(f"✅ 结果保存至: {results_file}")
+        logger.info(f"[SAVED] Results saved to: {results_file}")
         return results_file
 
     def run_tuning(self, symbols=None, timeframes=None):
-        """运行超參数調整"""
+        """運行超參數調整"""
         if symbols is None:
             symbols = self.loader.symbols
         if timeframes is None:
             timeframes = self.loader.timeframes
 
         logger.info(f"\n{'='*80}")
-        logger.info(f"🚀 開始超參数調整 (客觀公式版本)")
+        logger.info(f"[START] Starting Hyperparameter Tuning (Objective Formula Version)")
         logger.info(f"{'='*80}")
-        logger.info(f"幣种: {len(symbols)}, 時框: {len(timeframes)}")
-        logger.info(f"總任務: {len(symbols) * len(timeframes)}")
+        logger.info(f"[INFO] Symbols: {len(symbols)}, Timeframes: {len(timeframes)}")
+        logger.info(f"[INFO] Total tasks: {len(symbols) * len(timeframes)}")
 
         for symbol in symbols:
             for timeframe in timeframes:
-                logger.info(f"\n⬇️ 調整 {symbol} {timeframe}...")
+                logger.info(f"\n[TASK] Tuning {symbol} {timeframe}...")
 
                 try:
                     best_params, best_score = self.tune_grid_search(
@@ -218,18 +224,18 @@ class HyperparameterTunerV2_Objective:
                     if best_params:
                         self.save_best_params(symbol, timeframe, best_params, best_score)
                     else:
-                        logger.warning(f"{symbol} {timeframe} 調整失敗")
+                        logger.warning(f"[WARNING] {symbol} {timeframe} tuning failed")
 
                 except Exception as e:
-                    logger.error(f"{symbol} {timeframe} 错误: {e}")
+                    logger.error(f"[ERROR] {symbol} {timeframe}: {e}")
                     import traceback
 
                     traceback.print_exc()
 
         logger.info(f"\n{'='*80}")
-        logger.info(f"✅ 超參数調整完成")
+        logger.info(f"[COMPLETED] Hyperparameter Tuning Complete")
         logger.info(f"{'='*80}")
-        logger.info(f"结果保存于: {self.output_dir}")
+        logger.info(f"[RESULTS] Saved to: {self.output_dir}")
 
 
 if __name__ == "__main__":
