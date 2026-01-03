@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" data-color-scheme="dark">
+<html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
   <title>BB Bounce ML - Realtime Detector V2</title>
   <style>
     :root {
@@ -26,7 +27,7 @@
     * { box-sizing: border-box; }
     html, body {
       margin: 0; padding: 0; width: 100%; height: 100%;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
       background: linear-gradient(135deg, #0f172a 0%, #1a202c 50%, #111827 100%);
       color: var(--color-gray-200);
       -webkit-font-smoothing: antialiased;
@@ -98,6 +99,7 @@
       color: var(--color-gray-200);
       font-size: 12px;
       cursor: pointer;
+      font-family: inherit;
     }
 
     select:focus { outline: none; border-color: var(--color-teal-400); }
@@ -237,15 +239,17 @@
       border: 1px solid rgba(100, 150, 100, 0.3);
       border-radius: 8px;
       padding: 12px;
-      font-family: 'Courier New', monospace;
+      font-family: 'Courier New', 'Consolas', monospace;
       font-size: 11px;
       color: #22c55e;
       max-height: 300px;
       overflow-y: auto;
-      line-height: 1.4;
+      line-height: 1.5;
+      word-break: break-all;
+      white-space: pre-wrap;
     }
 
-    .debug-line { margin: 2px 0; }
+    .debug-line { margin: 2px 0; font-size: 11px; }
     .debug-time { color: #60a5fa; }
     .debug-model { color: #a78bfa; }
     .debug-info { color: #22c55e; }
@@ -267,13 +271,11 @@
       .app-shell { grid-template-columns: 1fr; }
     }
 
-    /* Scrollbar */
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); }
     ::-webkit-scrollbar-thumb { background: rgba(100, 150, 100, 0.5); border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: rgba(100, 150, 100, 0.8); }
   </style>
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -306,11 +308,11 @@
       <div class="control-group">
         <div class="checkbox-row">
           <input type="checkbox" id="show-only-active" checked>
-          <label class="control-label">僅顯示有信號</label>
+          <label class="control-label" for="show-only-active">僅顯示有信號</label>
         </div>
         <div class="checkbox-row">
           <input type="checkbox" id="show-debug" checked>
-          <label class="control-label">顯示調試信息</label>
+          <label class="control-label" for="show-debug">顯示調試信息</label>
         </div>
       </div>
     </div>
@@ -318,30 +320,50 @@
     <main class="layout-main">
       <section class="panel">
         <h3 class="panel-title">選擇幣種 <span id="selected-count">(0)</span></h3>
-        <div class="symbol-list" id="symbol-list"></div>
+        <div class="symbol-list" id="symbol-list">
+          <div style="color: var(--color-gray-300); padding: 20px; text-align: center;">等待連接...</div>
+        </div>
       </section>
 
       <section class="panel">
         <h3 class="panel-title">實時信號</h3>
-        <div class="signals-grid" id="signals-grid"></div>
+        <div class="signals-grid" id="signals-grid">
+          <div style="color: var(--color-gray-300); text-align: center; padding: 20px;">無信號</div>
+        </div>
       </section>
 
       <section class="panel">
         <h3 class="panel-title">模型調試信息</h3>
         <div class="debug-panel" id="debug-panel">
-          <div class="debug-line" style="color: #22c55e;">等待連接...</div>
+          <div class="debug-line" style="color: #22c55e;">正在初始化...</div>
         </div>
       </section>
     </main>
 
     <footer>
       <span>BB Bounce ML Realtime Detector V2 | 企業級部署版本</span>
-      <span>運行狀態: <span id="status" style="color: #22c55e;">連接中</span></span>
+      <span>運行狀態: <span id="status" style="color: #fbbf24;">初始化中</span></span>
     </footer>
   </div>
 
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script>
-    const socket = io();
+    // 確保正確的連接地址
+    const getSocketURL = () => {
+      const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
+      const host = window.location.hostname;
+      const port = window.location.port ? ':' + window.location.port : '';
+      return `${protocol}://${host}${port}`;
+    };
+
+    const socket = io(getSocketURL(), {
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: Infinity,
+      transports: ['websocket', 'polling']
+    });
+
     const debugLines = [];
     const maxDebugLines = 50;
 
@@ -360,9 +382,10 @@
     const selectedCountEl = document.getElementById('selected-count');
     const statusEl = document.getElementById('status');
 
-    function addDebugLine(message, type = 'info') {
+    function addDebugLine(message) {
       const timestamp = new Date().toLocaleTimeString('zh-TW');
-      debugLines.unshift(`[${timestamp}] ${message}`);
+      const logLine = `[${timestamp}] ${message}`;
+      debugLines.unshift(logLine);
       if (debugLines.length > maxDebugLines) debugLines.pop();
       renderDebugPanel();
     }
@@ -372,9 +395,14 @@
         debugPanelEl.innerHTML = '<div class="debug-line">調試信息已隱藏</div>';
         return;
       }
-      debugPanelEl.innerHTML = debugLines
-        .map(line => `<div class="debug-line"><span class="debug-time">${line.substring(1, 13)}</span> ${line.substring(14)}</div>`)
-        .join('');
+      const html = debugLines.map(line => {
+        const parts = line.match(/\[(.*?)\]\s(.*)/);
+        if (parts && parts.length === 3) {
+          return `<div class="debug-line"><span class="debug-time">[${parts[1]}]</span> ${parts[2]}</div>`;
+        }
+        return `<div class="debug-line">${line}</div>`;
+      }).join('');
+      debugPanelEl.innerHTML = html || '<div class="debug-line">無調試信息</div>';
     }
 
     function renderSymbols() {
@@ -399,7 +427,7 @@
           renderSymbols();
           renderSignals();
           updateSelectedCount();
-          addDebugLine(`✓ 幣種切換: ${symbol} (${isSelected ? '取消' : '選擇'})`);
+          addDebugLine(`幣種切換: ${symbol} (${isSelected ? '取消選擇' : '已選擇'})`);
         });
         symbolListEl.appendChild(el);
       }
@@ -475,25 +503,24 @@
 
     document.getElementById('timeframe-select').addEventListener('change', (e) => {
       currentTimeframe = e.target.value;
-      addDebugLine(`⏱ 時間框架變更: ${e.target.value}`);
+      addDebugLine(`時間框架變更: ${e.target.value}`);
       socket.emit('set_timeframe', { timeframe: currentTimeframe });
     });
 
     document.getElementById('detection-mode').addEventListener('change', (e) => {
       detectionMode = e.target.value;
-      addDebugLine(`🔍 檢測模式: ${e.target.value}`);
+      addDebugLine(`檢測模式: ${e.target.value}`);
       renderSignals();
     });
 
     document.getElementById('show-only-active').addEventListener('change', (e) => {
       showOnlyActive = e.target.checked;
-      addDebugLine(`👁 只顯示活躍幣種: ${e.target.checked ? '開' : '關'}`);
+      addDebugLine(`活躍幣種過濾: ${e.target.checked ? '開啟' : '關閉'}`);
       renderSignals();
     });
 
     document.getElementById('show-debug').addEventListener('change', (e) => {
       showDebug = e.target.checked;
-      addDebugLine(`🐛 調試信息: ${e.target.checked ? '顯示' : '隱藏'}`);
       renderDebugPanel();
     });
 
@@ -501,30 +528,37 @@
       paused = !paused;
       const btn = document.getElementById('toggle-pause');
       btn.textContent = paused ? '恢復' : '暫停';
-      addDebugLine(`${paused ? '⏸' : '▶'} 實時更新${paused ? '已暫停' : '已恢復'}`);
+      addDebugLine(`實時更新: ${paused ? '已暫停' : '已恢復'}`);
     });
 
     document.getElementById('force-refresh').addEventListener('click', () => {
       socket.emit('force_refresh', {});
-      addDebugLine('⚡ 强制刷新所有幣種');
+      addDebugLine('強制刷新所有幣種');
     });
 
     socket.on('connect', () => {
       statusEl.textContent = '已連接';
       statusEl.style.color = '#22c55e';
-      addDebugLine('✓ WebSocket 連接成功');
+      addDebugLine('WebSocket 連接成功');
       socket.emit('request_symbol_list');
+    });
+
+    socket.on('connect_error', (error) => {
+      statusEl.textContent = '連接錯誤';
+      statusEl.style.color = '#ef4444';
+      addDebugLine(`連接錯誤: ${error.message || error}`);
     });
 
     socket.on('disconnect', () => {
       statusEl.textContent = '已斷開';
       statusEl.style.color = '#ef4444';
-      addDebugLine('✗ WebSocket 連接已斷開');
+      addDebugLine('WebSocket 連接已斷開');
     });
 
     socket.on('symbol_list_response', (data) => {
       allSymbols = data.symbols || [];
-      addDebugLine(`📊 已加載 ${allSymbols.length} 個幣種`);
+      addDebugLine(`已加載 ${allSymbols.length} 個幣種`);
+      addDebugLine(`幣種列表: ${allSymbols.join(', ')}`);
       renderSymbols();
     });
 
@@ -532,7 +566,7 @@
       if (paused) return;
 
       const signal = {
-        symbol: payload.symbol,
+        symbol: payload.symbol || 'UNKNOWN',
         timeframe: payload.timeframe || '15m',
         side: (payload.side || 'long').toLowerCase(),
         validity_prob: payload.validity_prob || 0,
@@ -547,15 +581,16 @@
       latestSignals = latestSignals.slice(0, 100);
 
       renderSignals();
-      addDebugLine(`📈 新信號: ${signal.symbol} ${signal.side.toUpperCase()} @ ${Math.round(signal.validity_prob * 100)}%`);
+      addDebugLine(`新信號: ${signal.symbol} ${signal.side.toUpperCase()} @ ${Math.round(signal.validity_prob * 100)}%`);
+    });
+
+    socket.on('error', (error) => {
+      addDebugLine(`系統錯誤: ${error}`);
     });
 
     // 初始化
-    addDebugLine('🚀 應用啟動成功');
-    addDebugLine('模型配置:');
-    addDebugLine('  • 波動大小分類器');
-    addDebugLine('  • BB 通道上下軌分類器');
-    addDebugLine('  • 有效性驗證模型');
+    addDebugLine('應用啟動成功');
+    addDebugLine('連接信息: ' + getSocketURL());
   </script>
 </body>
 </html>
