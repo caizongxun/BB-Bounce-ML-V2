@@ -1,0 +1,62 @@
+# Fly.io 應用記述
+# 所似文檔詳概間記可以探訪
+# https://fly.io/docs/reference/configuration/
+
+app = "bb-bounce-realtime"
+kill_signal = "SIGINT"
+kill_timeout = 5
+primary_region = "tyo"
+
+[build]
+  builder = "paket"
+  buildpacks = [
+    { image = "heroku/buildpacks:20" }
+  ]
+
+[env]
+  FLASK_ENV = "production"
+  PORT = "5000"
+  PYTHONUNBUFFERED = "1"
+
+# 已残的 mounts 是將模型窔案儲存於永久儲存區中以優匯處理速度
+# 位痦子: /mnt/models
+[mounts]
+  source = "models_volume"
+  destination = "/mnt/models"
+  processes = ["app"]
+
+[processes]
+  app = "python realtime_service_v3.py"
+
+[[services]]
+  internal_port = 5000
+  protocol = "tcp"
+  
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 100
+    soft_limit = 80
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.http_checks]
+    enabled = true
+    grace_period = "10s"
+    interval = "15s"
+    method = "get"
+    path = "/health"
+    protocol = "http"
+    timeout = 5s
+    tls_skip_verify = false
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256
