@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 BB反彈ML系統 - 實時服務 V5 (簡化版)
-直接計算 BB 通道
-先棂測接近/接觸 -> 更改優化: 粗付特椅提取，不需要正確的特椅數
+直接計算 BB 通道 - 不再依賴內存 history
+使用 Binance 完整歷史數據來計算 BB
 """
 
 import numpy as np
@@ -12,10 +12,11 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
 import logging
-from collections import deque
 import warnings
 import joblib
 import pickle
+import requests
+from functools import lru_cache
 
 warnings.filterwarnings('ignore')
 
@@ -44,7 +45,6 @@ TIMEFRAMES = ['15m', '1h']
 # BB 參數
 BB_PERIOD = 20
 BB_STD = 2
-BB_MIN_PERIOD = 5  # 最少需要 5 根 K 棒
 
 # 接近/接觸閾值
 TOUCHED_THRESHOLD = 0.0005      # 0.05% - 接觸
@@ -52,72 +52,78 @@ APPROACHING_DANGER = 0.002      # 0.2%  - 接近危險
 APPROACHING_WARNING = 0.005     # 0.5%  - 接近警告
 APPROACHING_CAUTION = 0.015     # 1.5%  - 接近注意
 
+# Binance API
+BINANCE_API = 'https://api.binance.com/api/v3'
+
 MODELS_DIR = Path('./models')
 
 # ============================================================
-# BB 計算器
+# BB 計算器 - 使用 Binance 完整歷史數據
 # ============================================================
 
 class BBCalculator:
-    """直接計算 BB 通道，檢測接近/接觸"""
+    """使用 Binance 完整歷史數據計算 BB 通道"""
     
-    def __init__(self, history_size=100):
-        self.history_size = history_size
-        self.history = {}  # {(symbol, timeframe): deque of OHLCV}
+    @staticmethod
+    def fetch_historical_closes(symbol, timeframe, limit=100):
+        """從 Binance 獲取完整歷史收盤價"""
+        try:
+            url = f"{BINANCE_API}/klines"
+            params = {
+                'symbol': symbol,
+                'interval': timeframe,
+                'limit': limit
+            }
+            response = requests.get(url, params=params, timeout=5)
+            if response.status_code == 200:
+                klines = response.json()
+                closes = np.array([float(k[4]) for k in klines])
+                return closes
+        except Exception as e:
+            logger.warning(f'[Binance] 獲取歷史數據失敗: {symbol} {timeframe} - {e}')
+        return None
     
-    def update_history(self, symbol, timeframe, ohlcv_data):
-        """更新歷史數據"""
-        key = (symbol, timeframe)
-        if key not in self.history:
-            self.history[key] = deque(maxlen=self.history_size)
-        self.history[key].append(ohlcv_data)
-    
-    def _get_closes(self, symbol, timeframe):
-        """獲取所有收盤價"""
-        key = (symbol, timeframe)
-        if key not in self.history or len(self.history[key]) == 0:
-            return None
-        return np.array([d.get('close', 0) for d in list(self.history[key])])
-    
-    def calculate_bb(self, symbol, timeframe):
+    @staticmethod
+    def calculate_bb(symbol, timeframe, current_ohlcv):
         """計算 BB 通道值
         
-        修復：允許不足 20 根時用可用數據計算
+        流程：
+        1. 從 Binance 獲取最近 100 根 K 棒
+        2. 計算 BB (20 根)
+        3. 使用當前 K 棒的 high/low 計算距離
         """
-        closes = self._get_closes(symbol, timeframe)
-        if closes is None or len(closes) < BB_MIN_PERIOD:
-            logger.warning(f'[BB計算] {symbol} {timeframe}: 數據不足 (只有 {len(closes) if closes is not None else 0} 根)')
+        # 獲取歷史數據
+        closes = BBCalculator.fetch_historical_closes(symbol, timeframe, limit=100)
+        if closes is None or len(closes) < BB_PERIOD:
+            actual_length = len(closes) if closes is not None else 0
+            logger.warning(f'[BB計算] {symbol} {timeframe}: 數據不足 (只有 {actual_length} 根，需要 {BB_PERIOD} 根)')
             return None, None, None, None
         
-        # 使用可用的 closes（最多 BB_PERIOD）
-        period = min(len(closes), BB_PERIOD)
-        recent_closes = closes[-period:]
+        # 取最後 20 根 K 棒計算 BB
+        recent_closes = closes[-BB_PERIOD:]
         
         sma = np.mean(recent_closes)
         std = np.std(recent_closes)
         upper = sma + BB_STD * std
         lower = sma - BB_STD * std
-        width = (upper - lower) / sma if sma != 0 else 0
         
-        logger.info(f'[BB計算] {symbol} {timeframe}: 用 {period} 根計算 - 上={upper:.2f}, 中={sma:.2f}, 下={lower:.2f}')
+        logger.info(f'[BB計算] {symbol} {timeframe}: 用 {len(closes)} 根數據計算 - 上={upper:.2f}, 中={sma:.2f}, 下={lower:.2f}')
         
-        return float(upper), float(sma), float(lower), float(width)
+        return float(upper), float(sma), float(lower), float(len(closes))
     
-    def analyze_bb_status(self, symbol, timeframe, current_ohlcv):
+    @staticmethod
+    def analyze_bb_status(symbol, timeframe, current_ohlcv):
         """
         分析 K 棒是否接近/接觸 BB 軌道
         返回：{status, direction, distance_percent, warning_level, bb_upper, bb_middle, bb_lower}
         
-        修復計算邏輯：
-        1. 使用實時價格 (current_close) 而不是歷史最高/最低
-        2. 改用件數佔比作為距離，也使用正確的閾值
-        3. 改整個判字邏輯
+        修復邏輯：
+        1. 使用實時價格 (current_close) 
+        2. 改用件數比例作為距離
+        3. 完整的判別邏輯
         """
-        # 更新歷史
-        self.update_history(symbol, timeframe, current_ohlcv)
-        
         # 計算 BB
-        bb_upper, bb_middle, bb_lower, bb_width = self.calculate_bb(symbol, timeframe)
+        bb_upper, bb_middle, bb_lower, data_count = BBCalculator.calculate_bb(symbol, timeframe, current_ohlcv)
         if bb_upper is None:
             logger.warning(f'[BB狀態] {symbol} {timeframe}: 無法計算 BB')
             return {
@@ -152,7 +158,7 @@ class BBCalculator:
         dist_to_lower = (current_low - bb_lower) / bb_lower if bb_lower > 0 else 1.0
         
         logger.info(f'[距離計算] {symbol} {timeframe}: 上軌距離={dist_to_upper*100:.8f}%, 下軌距離={dist_to_lower*100:.8f}%')
-        logger.info(f'[價格信息] 現價={current_close:.2f}, 高={current_high:.2f}, 低={current_low:.2f}')
+        logger.info(f'[價格信息] {symbol} {timeframe}: 現價={current_close:.2f}, 高={current_high:.2f}, 低={current_low:.2f}')
         
         # 判斷狀態
         status = 'normal'
@@ -402,7 +408,6 @@ class VolatilityPredictor:
 # 初始化
 # ============================================================
 
-bb_calculator = BBCalculator()
 validity_checker = ValidityChecker()
 volatility_predictor = VolatilityPredictor()
 
@@ -436,7 +441,7 @@ def predict():
         logger.info(f'\n[請求] {symbol} {timeframe} - 現價={ohlcv.get("close", 0):.2f}')
         
         # 第一步: 先檢測接近/接觸（純計算）
-        bb_result = bb_calculator.analyze_bb_status(symbol, timeframe, ohlcv)
+        bb_result = BBCalculator.analyze_bb_status(symbol, timeframe, ohlcv)
         
         # 第二步: 只有接近/接觸時才調用模型
         validity_result = None
@@ -477,10 +482,10 @@ if __name__ == '__main__':
         logger.info('BB 反彈實時監控系統 V5 (簡化版)')
         logger.info('=' * 60)
         logger.info('流程：')
-        logger.info('  1. 直接計算 BB 通道 (最少 5 根 K 棒)')
-        logger.info('  2. 檢測接近/接觸')
-        logger.info('  3. 只有接近/接觸時才調用模型')
-        logger.info('  4. 粗付特椅提取：填充元余批次')
+        logger.info('  1. 使用 Binance 完整歷史數據計算 BB 通道')
+        logger.info('  2. 不再依賴內存 history')
+        logger.info('  3. 檢測接近/接觸')
+        logger.info('  4. 只有接近/接觸時才調用模型')
         logger.info('=' * 60)
         
         logger.info(f'部署地址: 0.0.0.0:5000')
