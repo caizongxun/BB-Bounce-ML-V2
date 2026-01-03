@@ -9,6 +9,7 @@ BB反彈ML系統 - 實時服務 V3 (修載第十輫修載)
 5. JSON 序列化錯誤 - label_map 鍵型別混合
 6. label_map 映射錯誤 - 數字映射到數字而不是文字
 7. 觸厬檢測邏輯 - 只檢測當下 K 棒，不檢測歷史數據
+8. 波動性預測整合到信號生成邏輯
 """
 
 import os
@@ -697,6 +698,7 @@ class ModelManager:
             return None
     
     def predict_volatility(self, symbol, timeframe, ohlcv_data):
+        """波動性預測 - 預測未來是否會有波動性擴張"""
         key = (symbol, timeframe)
         if key not in self.vol_models:
             return None
@@ -709,13 +711,26 @@ class ModelManager:
             features = self.vol_feature_extractor.extract_features(symbol, timeframe, ohlcv_data)
             features_scaled = models['scaler'].transform([features])
             predicted_vol = float(models['model'].predict(features_scaled)[0])
-            will_expand = predicted_vol > 1.2
-            expansion_strength = max(0, (predicted_vol - 1.0) / 1.0)
+            
+            # 波動性評估邏輯
+            will_expand = predicted_vol > 1.2  # 基準線 1.2
+            expansion_strength = max(0, (predicted_vol - 1.0) / 1.0)  # 標準化强度
+            
+            if expansion_strength > 1.5:
+                vol_level = 'very_high'
+            elif expansion_strength > 1.0:
+                vol_level = 'high'
+            elif expansion_strength > 0.5:
+                vol_level = 'moderate'
+            else:
+                vol_level = 'low'
             
             return {
-                'predicted_vol': predicted_vol,
+                'predicted_vol': float(predicted_vol),
                 'will_expand': will_expand,
-                'expansion_strength': min(1.0, expansion_strength)
+                'expansion_strength': float(min(1.0, expansion_strength)),
+                'volatility_level': vol_level,
+                'confidence': float(min(1.0, abs(predicted_vol - 1.0) * 0.5))
             }
         except Exception as e:
             logger.error(f'波動性鞐測失敗 {symbol} {timeframe}: {str(e)[:200]}')
@@ -812,7 +827,8 @@ def predict_batch():
                 'bb_touch': bb_result,
                 'validity': validity_result,
                 'volatility': vol_result,
-                'signal': signal
+                'signal': signal,
+                'confidence': calculate_confidence(bb_result, validity_result, vol_result)
             })
         
         return jsonify({
@@ -827,44 +843,75 @@ def predict_batch():
 
 
 def generate_signal(bb_result, validity_result, vol_result):
+    """生成交易信號 - 整合三層模型"""
     if not bb_result or not bb_result['touched']:
         return 'NEUTRAL'
     if not validity_result:
         return 'NEUTRAL'
     
-    quality_score = {'excellent': 4, 'good': 3, 'moderate': 2, 'weak': 1, 'poor': 0}.get(validity_result.get('quality', 'poor'), 0)
-    vol_score = 2 if (vol_result and vol_result.get('will_expand')) else (1 if vol_result else 0)
-    total_score = quality_score + vol_score
+    # 品質評分
+    quality_score = {
+        'excellent': 4,
+        'good': 3,
+        'moderate': 2,
+        'weak': 1,
+        'poor': 0
+    }.get(validity_result.get('quality', 'poor'), 0)
     
-    if total_score >= 5:
+    # 波動性評分
+    vol_score = 0
+    if vol_result:
+        if vol_result.get('volatility_level') == 'very_high':
+            vol_score = 3
+        elif vol_result.get('volatility_level') == 'high':
+            vol_score = 2
+        elif vol_result.get('volatility_level') == 'moderate':
+            vol_score = 1
+        else:
+            vol_score = 0
+    
+    # 觸厬位置
+    position_score = 1  # BB觸厬
+    
+    # 總評分
+    total_score = quality_score + vol_score + position_score
+    
+    # 信號生成
+    if total_score >= 7:
         return 'STRONG_BUY' if bb_result['touch_type'] == 'lower' else 'STRONG_SELL'
-    elif total_score >= 3:
+    elif total_score >= 5:
         return 'BUY' if bb_result['touch_type'] == 'lower' else 'SELL'
-    elif total_score >= 1:
+    elif total_score >= 3:
         return 'HOLD'
-    return 'NEUTRAL'
+    else:
+        return 'NEUTRAL'
 
 
 def calculate_confidence(bb_result, validity_result, vol_result):
+    """計算綜合信心度"""
     if not bb_result:
         return 0.0
-    confidence = bb_result.get('confidence', 0.5) * 0.3
+    
+    confidence = bb_result.get('confidence', 0.5) * 0.25
+    
     if validity_result:
-        confidence += validity_result.get('confidence', 0.5) * 0.5
+        confidence += validity_result.get('confidence', 0.5) * 0.50
+    
     if vol_result:
-        confidence += vol_result.get('expansion_strength', 0.5) * 0.2
+        confidence += vol_result.get('confidence', 0.3) * 0.25
+    
     return min(1.0, confidence)
 
 
 if __name__ == '__main__':
     try:
         logger.info('='*60)
-        logger.info('BB反彈ML系統 - 實時服務 V3 (修載版本)')
+        logger.info('BB反彈ML系統 - 實時服務 V3 (修載版本+波動性整合)')
         logger.info('='*60)
         logger.info('模型架構：')
         logger.info('  層級1: BB Position Detection (直接檢測當下 K 棒)')
         logger.info('  層級2: Validity Detector (17 個特徵)')
-        logger.info('  層級3: Volatility Predictor (15 個特徵)')
+        logger.info('  層級3: Volatility Predictor (15 個特徵) - 新增')
         logger.info('='*60)
         
         # 初始化模型管理器
