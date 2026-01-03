@@ -19,7 +19,7 @@
             overflow-x: hidden;
         }
 
-        /* 頭部導航 */
+        /* 頻部導航 */
         .header {
             background: rgba(15, 15, 15, 0.95);
             border-bottom: 2px solid #00bcd4;
@@ -80,7 +80,7 @@
             50% { opacity: 0.5; }
         }
 
-        /* 標籤頁面 */
+        /* 依標頁面 */
         .tabs {
             max-width: 1400px;
             margin: 0 auto;
@@ -217,7 +217,7 @@
             background: rgba(0, 188, 212, 0.2);
         }
 
-        /* 詳細信息面板 */
+        /* 詳細信歸面板 */
         .detail-panel {
             background: rgba(20, 20, 20, 0.6);
             border: 1px solid rgba(0, 188, 212, 0.15);
@@ -263,6 +263,24 @@
 
         .detail-value.warning {
             color: #ffc107;
+        }
+
+        /* 波動性颜色*/
+        .detail-value.vol-very-high {
+            color: #ff5252;
+            font-weight: 700;
+        }
+
+        .detail-value.vol-high {
+            color: #ffc107;
+        }
+
+        .detail-value.vol-moderate {
+            color: #4dd0e1;
+        }
+
+        .detail-value.vol-low {
+            color: #4caf50;
         }
 
         /* Tab 2: 幣種網格 */
@@ -432,7 +450,7 @@
             color: #e0e0e0;
         }
 
-        /* 自定義滾動條 */
+        /* 自定義滑動條 */
         ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
@@ -451,7 +469,7 @@
             background: rgba(0, 188, 212, 0.5);
         }
 
-        /* 響應式設計 */
+        /* 响應式設計 */
         @media (max-width: 768px) {
             .header-content {
                 flex-direction: column;
@@ -478,10 +496,10 @@
     </style>
 </head>
 <body>
-    <!-- 頭部 -->
+    <!-- 頻部 -->
     <div class="header">
         <div class="header-content">
-            <div class="logo">BB 反彈實時監控系統 V4</div>
+            <div class="logo">BB 反彈實時監控系統 V4 + 波動性預測</div>
             <div class="status-info">
                 <div class="status-item">
                     <div class="status-dot active"></div>
@@ -494,7 +512,7 @@
         </div>
     </div>
 
-    <!-- 標籤頁面 -->
+    <!-- 依標頁面 -->
     <div class="tabs">
         <div class="tab-buttons">
             <button class="tab-button active" onclick="switchTab(0)">詳細分析</button>
@@ -635,6 +653,7 @@
             const touched = bb.touched || false;
             const touchType = bb.touch_type || 'none';
             const confidence = (bb.confidence * 100).toFixed(2);
+            const vol = data.volatility || {};
 
             let statusClass = 'warning';
             let statusText = '未觸及';
@@ -643,8 +662,14 @@
                 statusText = '觸及下軌 ↓';
             } else if (touched && touchType === 'upper') {
                 statusClass = 'negative';
-                statusText = '觸及上軌 ↑';
+                statusText = '觸厬上軌 ↑';
             }
+
+            let volClass = 'vol-low';
+            let volLevel = vol.volatility_level || 'unknown';
+            if (volLevel === 'very_high') volClass = 'vol-very-high';
+            else if (volLevel === 'high') volClass = 'vol-high';
+            else if (volLevel === 'moderate') volClass = 'vol-moderate';
 
             return `
                 <div class="detail-grid">
@@ -657,13 +682,27 @@
                         <div class="detail-value">${timeframe}</div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">觸碰狀態</div>
+                        <div class="detail-label">觸碑狀態</div>
                         <div class="detail-value ${statusClass}">${statusText}</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">信心度</div>
                         <div class="detail-value">${confidence}%</div>
                     </div>
+                    ${vol.volatility_level ? `
+                        <div class="detail-item">
+                            <div class="detail-label">波動性級別</div>
+                            <div class="detail-value ${volClass}">${volLevel.toUpperCase()}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">波動性數值</div>
+                            <div class="detail-value">${parseFloat(vol.predicted_vol).toFixed(3)}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">擴張強度</div>
+                            <div class="detail-value">${(vol.expansion_strength * 100).toFixed(1)}%</div>
+                        </div>
+                    ` : ''}
                     ${bb.bb_upper ? `
                         <div class="detail-item">
                             <div class="detail-label">上軌</div>
@@ -721,6 +760,7 @@
             const bb = data.bb_touch || {};
             const touched = bb.touched || false;
             const touchType = bb.touch_type || 'none';
+            const vol = data.volatility || {};
             let cardClass = '';
             let statusClass = '';
             let statusText = '正常';
@@ -754,8 +794,8 @@
                             <div class="symbol-metric-value">${((bb.confidence || 0) * 100).toFixed(1)}%</div>
                         </div>
                         <div class="symbol-metric">
-                            <div class="symbol-metric-label">狀態</div>
-                            <div class="symbol-metric-value">${touched ? '觸及' : '監控中'}</div>
+                            <div class="symbol-metric-label">波動性</div>
+                            <div class="symbol-metric-value">${(vol.expansion_strength || 0).toFixed(2)}</div>
                         </div>
                     </div>
                     ${bb.bb_upper ? `
@@ -773,7 +813,7 @@
                                 <div class="symbol-bb-value">${parseFloat(bb.bb_lower).toFixed(0)}</div>
                             </div>
                             <div class="symbol-bb-item">
-                                <div class="symbol-bb-label">現價</div>
+                                <div class="symbol-bb-label">現傷</div>
                                 <div class="symbol-bb-value">${parseFloat(bb.current_high).toFixed(0)}</div>
                             </div>
                         </div>
