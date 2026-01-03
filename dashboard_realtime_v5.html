@@ -728,7 +728,7 @@
                     <span id="last-update">最後更新: --:--:--</span>
                 </div>
                 <div class="status-item">
-                    <span id="update-interval">更新間隔: --秒</span>
+                    <span id="update-interval">更新間隔: 0秒</span>
                 </div>
             </div>
         </div>
@@ -783,7 +783,7 @@
                     </div>
 
                     <div class="button-group">
-                        <button class="btn btn-primary" onclick="updateDetailedAnalysis()">開始分析</button>
+                        <button class="btn btn-primary" onclick="startDetailAnalysis()">開始分析</button>
                     </div>
                 </div>
 
@@ -837,10 +837,12 @@
         ];
 
         let debugLogs = [];
-        let detailInterval = null;
-        let allSymbolsInterval = null;
+        let detailUpdateTimer = null;
+        let allSymbolsUpdateTimer = null;
         let currentDetailConfig = null;
         let currentTab = 0;
+        let lastUpdateTime = null;
+        let updateCounter = 0;
 
         // 診斷日誌
         function addDebugLog(message, type = 'info') {
@@ -860,6 +862,16 @@
                 debugPanel.textContent = logContent;
                 debugPanel.scrollTop = debugPanel.scrollHeight;
             }
+        }
+
+        function updateTimestamp() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
+            document.getElementById('last-update').textContent = `最後更新: ${timeStr}`;
+            
+            // 更新間隔計數器
+            updateCounter++;
+            document.getElementById('update-interval').textContent = `更新間隔: ${updateCounter}秒`;
         }
 
         async function fetchOHLCV(symbol, timeframe) {
@@ -894,9 +906,9 @@
             document.querySelectorAll('.tab-content')[tabIndex].classList.add('active');
             document.querySelectorAll('.tab-button')[tabIndex].classList.add('active');
 
-            // 止止舀事並後日後日长配置
-            if (detailInterval) clearInterval(detailInterval);
-            if (allSymbolsInterval) clearInterval(allSymbolsInterval);
+            // 止止所有更新器
+            if (detailUpdateTimer) clearInterval(detailUpdateTimer);
+            if (allSymbolsUpdateTimer) clearInterval(allSymbolsUpdateTimer);
 
             if (tabIndex === 0) {
                 // 詳細分析模式
@@ -917,10 +929,8 @@
             const timeframe = document.getElementById('timeframe-select').value;
             const container = document.getElementById('detail-content');
 
-            // 保存設置，用於自動更新
-            currentDetailConfig = { symbol, timeframe };
-
-            addDebugLog(`[分析] 開始分析 ${symbol} ${timeframe}`, 'info');
+            updateCounter = 0; // 重置計數器
+            addDebugLog(`[分析] 更新 ${symbol} ${timeframe}`, 'info');
             
             try {
                 const ohlcv = await fetchOHLCV(symbol, timeframe);
@@ -929,7 +939,6 @@
                     return;
                 }
 
-                addDebugLog(`[API] 正在調用預測服務...`, 'info');
                 const response = await fetch(`${API_BASE}/predict`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -943,12 +952,11 @@
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
                 const data = await response.json();
-                addDebugLog(`[API] 預測成功`, 'success');
                 
                 const bb = data.bb_touch;
                 addDebugLog(`[布林通道] 狀態=${bb.status}, 方向=${bb.direction}, 距離=${bb.distance_percent.toFixed(8)}%`, 'info');
-                addDebugLog(`[軌道位置] 上軌=${bb.bb_upper}, 中線=${bb.bb_middle}, 下軌=${bb.bb_lower}`, 'info');
-                addDebugLog(`[現價] ${ohlcv.close}`, 'info');
+                addDebugLog(`[軌道位置] 上軌=${bb.bb_upper ? bb.bb_upper.toFixed(2) : 'null'}, 中線=${bb.bb_middle ? bb.bb_middle.toFixed(2) : 'null'}, 下軌=${bb.bb_lower ? bb.bb_lower.toFixed(2) : 'null'}`, 'info');
+                addDebugLog(`[現價] ${ohlcv.close.toFixed(2)}`, 'info');
                 
                 if (data.validity) {
                     addDebugLog(`[有效性] 概率=${(data.validity.probability || 0).toFixed(1)}%, 評級=${data.validity.quality}`, 'success');
@@ -971,7 +979,6 @@
             const distance = bb.distance_percent || 0;
             const warning = bb.warning_level || 'none';
 
-            // 判別邏輯: 距離 <= 0.05% 或 warning === 'danger' 是危險
             let sectionClass = 'safe';
             if (warning === 'danger' || distance <= 0.05) {
                 sectionClass = 'danger';
@@ -1023,7 +1030,6 @@
                 </div>
             `;
 
-            // 模型預測結果
             let modelHTML = '';
             const validity = data.validity;
             const volatility = data.volatility;
@@ -1034,7 +1040,6 @@
                     <div class="model-grid">
             `;
 
-            // 有效性卡片
             if (validity && (status === 'approaching' || status === 'touched' || distance <= 0.05)) {
                 const qualityClass = `quality-${validity.quality}`;
                 modelHTML += `
@@ -1062,7 +1067,6 @@
                 `;
             }
 
-            // 波動性卡片
             if (volatility && (status === 'approaching' || status === 'touched' || distance <= 0.05)) {
                 modelHTML += `
                     <div class="model-card volatility">
@@ -1238,19 +1242,25 @@
             return { html: html, critical: isCritical };
         }
 
-        function updateTimestamp() {
-            const now = new Date().toLocaleTimeString('zh-TW', { hour12: false });
-            document.getElementById('last-update').textContent = `最後更新: ${now}`;
+        function startDetailAnalysis() {
+            const symbol = document.getElementById('symbol-select').value;
+            const timeframe = document.getElementById('timeframe-select').value;
+            
+            currentDetailConfig = { symbol, timeframe };
+            addDebugLog(`[開始] 開始分析 ${symbol} ${timeframe}`, 'success');
+            
+            // 立即執行一次
+            updateDetailedAnalysis();
+            
+            // 設定自動更新
+            startDetailUpdate();
         }
 
         function startDetailUpdate() {
-            if (detailInterval) clearInterval(detailInterval);
-            addDebugLog('[詳細] 開始 10 秒自動更新模式', 'success');
-            // 立即執行一次，然後每 10 秒更新
-            if (currentDetailConfig) {
-                updateDetailedAnalysis();
-            }
-            detailInterval = setInterval(() => {
+            if (detailUpdateTimer) clearInterval(detailUpdateTimer);
+            addDebugLog('[詳細] 開始自動更新 (10 秒間隔)', 'success');
+            
+            detailUpdateTimer = setInterval(() => {
                 if (currentDetailConfig && currentTab === 0) {
                     updateDetailedAnalysis();
                 }
@@ -1258,10 +1268,10 @@
         }
 
         function startAllSymbolsUpdate() {
-            if (allSymbolsInterval) clearInterval(allSymbolsInterval);
-            addDebugLog('[實時] 開始 10 秒自動更新模式', 'success');
-            updateAllSymbols();
-            allSymbolsInterval = setInterval(() => {
+            if (allSymbolsUpdateTimer) clearInterval(allSymbolsUpdateTimer);
+            addDebugLog('[實時] 開始自動更新 (10 秒間隔)', 'success');
+            
+            allSymbolsUpdateTimer = setInterval(() => {
                 if (currentTab === 1) {
                     updateAllSymbols();
                 }
@@ -1270,16 +1280,11 @@
 
         window.addEventListener('load', () => {
             addDebugLog('[系統] BB 反彈實時監控系統 V5 已啟動', 'success');
-            // 預伫加載實時監控
-            if (currentTab === 1) {
-                updateAllSymbols();
-                startAllSymbolsUpdate();
-            }
         });
 
         window.addEventListener('unload', () => {
-            if (detailInterval) clearInterval(detailInterval);
-            if (allSymbolsInterval) clearInterval(allSymbolsInterval);
+            if (detailUpdateTimer) clearInterval(detailUpdateTimer);
+            if (allSymbolsUpdateTimer) clearInterval(allSymbolsUpdateTimer);
         });
     </script>
 </body>
