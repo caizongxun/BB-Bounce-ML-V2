@@ -1,10 +1,12 @@
 """
 BB反彈ML系統 - 實時服務 V3
 支持三層模型整合：BB觸及檢測 -> 有效性判別 -> 波動性預測
+修正：pickle/joblib 序列化不一致問題
 """
 
 import os
 import pickle
+import joblib
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -16,8 +18,10 @@ import json
 from collections import deque
 from threading import Thread
 import time
+import warnings
 
-# 配置日誌
+warnings.filterwarnings('ignore', category=UserWarning)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -44,6 +48,51 @@ SYMBOLS = [
 TIMEFRAMES = ['15m', '1h']
 
 # ============================================================
+# 修正: 安全的模型加載器
+# ============================================================
+
+class ModelLoader:
+    """高算騂模型加載器 - 支持 pickle 和 joblib"""
+    
+    @staticmethod
+    def load_model(filepath, model_type='auto'):
+        """
+        加載檔案 (joblib 或 pickle)
+        
+        參數：
+        - filepath: 檔案路徑
+        - model_type: 'auto'(自動偵渫), 'joblib', 'pickle'
+        """
+        filepath = Path(filepath)
+        
+        if not filepath.exists():
+            logger.warning(f'檔案不存在: {filepath}')
+            return None
+        
+        try:
+            # 第一次：优先使用 joblib (訓練脚本使用)
+            if model_type in ['auto', 'joblib']:
+                try:
+                    model = joblib.load(filepath)
+                    logger.debug(f'使用 joblib 加載: {filepath.name}')
+                    return model
+                except Exception as e1:
+                    if model_type == 'joblib':
+                        raise
+                    logger.debug(f'joblib 加載失救：{e1}，新試 pickle')
+            
+            # 第二次：使用 pickle (encoding='latin1')
+            if model_type in ['auto', 'pickle']:
+                with open(filepath, 'rb') as f:
+                    model = pickle.load(f, encoding='latin1')
+                    logger.debug(f'使用 pickle 加載: {filepath.name}')
+                    return model
+        
+        except Exception as e:
+            logger.error(f'加載失救 {filepath}: {str(e)[:200]}')
+            return None
+
+# ============================================================
 # 模型管理器
 # ============================================================
 
@@ -54,7 +103,7 @@ class ModelManager:
         self.bb_models = {}  # Position Classifier
         self.validity_models = {}  # Validity Detector
         self.vol_models = {}  # Volatility Predictor
-        self.model_cache = {}  # 緩存已加載的模型
+        self.model_cache = {}  # 緩存
         self.load_all_models()
     
     def _get_model_path(self, model_type, symbol, timeframe):
@@ -62,8 +111,8 @@ class ModelManager:
         base_path = MODELS_DIR / model_type
         return base_path / symbol / timeframe
     
-    def _load_model_file(self, filepath, filename):
-        """加載單個模型文件"""
+    def _load_model_file(self, filepath, filename, model_type='auto'):
+        """加載單個模型檔案"""
         full_path = filepath / filename
         cache_key = str(full_path)
         
@@ -72,49 +121,99 @@ class ModelManager:
         
         if full_path.exists():
             try:
-                with open(full_path, 'rb') as f:
-                    model = pickle.load(f)
-                self.model_cache[cache_key] = model
-                logger.info(f"已加載: {cache_key}")
-                return model
+                # 使用安全加載器
+                model = ModelLoader.load_model(full_path, model_type)
+                
+                if model is not None:
+                    self.model_cache[cache_key] = model
+                    logger.info(f'已加載: {full_path.name}')
+                    return model
+                else:
+                    logger.warning(f'加載空值: {full_path}')
+                    return None
+            
             except Exception as e:
-                logger.error(f"加載失敗 {full_path}: {e}")
+                logger.error(f'加載失敐 {full_path}: {str(e)[:100]}')
                 return None
+        
+        logger.debug(f'檔案不存在: {full_path}')
         return None
     
     def load_all_models(self):
         """加載所有模型"""
-        logger.info("開始加載所有模型...")
+        logger.info('開始加載所有模型...')
+        
+        loaded_count = {'bb': 0, 'validity': 0, 'vol': 0}
+        failed_count = {'bb': 0, 'validity': 0, 'vol': 0}
         
         for symbol in SYMBOLS:
             for timeframe in TIMEFRAMES:
                 # 加載 BB Position Classifier
                 bb_path = self._get_model_path('bb_models', symbol, timeframe)
                 if bb_path.exists():
-                    self.bb_models[(symbol, timeframe)] = {
-                        'model': self._load_model_file(bb_path, 'model.pkl'),
-                        'scaler': self._load_model_file(bb_path, 'scaler.pkl'),
-                        'label_map': self._load_model_file(bb_path, 'label_map.pkl')
-                    }
+                    try:
+                        bb_model = self._load_model_file(bb_path, 'model.pkl')
+                        bb_scaler = self._load_model_file(bb_path, 'scaler.pkl')
+                        bb_label_map = self._load_model_file(bb_path, 'label_map.pkl')
+                        
+                        if bb_model and bb_scaler:
+                            self.bb_models[(symbol, timeframe)] = {
+                                'model': bb_model,
+                                'scaler': bb_scaler,
+                                'label_map': bb_label_map
+                            }
+                            loaded_count['bb'] += 1
+                        else:
+                            failed_count['bb'] += 1
+                    except Exception as e:
+                        logger.warning(f'BB 模型加載失敐 {symbol} {timeframe}: {e}')
+                        failed_count['bb'] += 1
                 
                 # 加載 Validity Detector
                 validity_path = self._get_model_path('validity_models', symbol, timeframe)
                 if validity_path.exists():
-                    self.validity_models[(symbol, timeframe)] = {
-                        'model': self._load_model_file(validity_path, 'validity_model.pkl'),
-                        'scaler': self._load_model_file(validity_path, 'scaler.pkl'),
-                        'feature_names': self._load_model_file(validity_path, 'feature_names.pkl')
-                    }
+                    try:
+                        # validity_models 使用 joblib 上帵 pickle
+                        validity_model = self._load_model_file(validity_path, 'validity_model.pkl', 'auto')
+                        validity_scaler = self._load_model_file(validity_path, 'scaler.pkl', 'auto')
+                        feature_names = self._load_model_file(validity_path, 'feature_names.pkl', 'auto')
+                        
+                        if validity_model and validity_scaler:
+                            self.validity_models[(symbol, timeframe)] = {
+                                'model': validity_model,
+                                'scaler': validity_scaler,
+                                'feature_names': feature_names
+                            }
+                            loaded_count['validity'] += 1
+                        else:
+                            failed_count['validity'] += 1
+                    except Exception as e:
+                        logger.warning(f'Validity 模型加載失敐 {symbol} {timeframe}: {e}')
+                        failed_count['validity'] += 1
                 
                 # 加載 Volatility Predictor
                 vol_path = self._get_model_path('vol_models', symbol, timeframe)
                 if vol_path.exists():
-                    self.vol_models[(symbol, timeframe)] = {
-                        'model': self._load_model_file(vol_path, 'model_regression.pkl'),
-                        'scaler': self._load_model_file(vol_path, 'scaler_regression.pkl')
-                    }
+                    try:
+                        vol_model = self._load_model_file(vol_path, 'model_regression.pkl')
+                        vol_scaler = self._load_model_file(vol_path, 'scaler_regression.pkl')
+                        
+                        if vol_model and vol_scaler:
+                            self.vol_models[(symbol, timeframe)] = {
+                                'model': vol_model,
+                                'scaler': vol_scaler
+                            }
+                            loaded_count['vol'] += 1
+                        else:
+                            failed_count['vol'] += 1
+                    except Exception as e:
+                        logger.warning(f'Vol 模型加載失敐 {symbol} {timeframe}: {e}')
+                        failed_count['vol'] += 1
         
-        logger.info(f"模型加載完成: {len(self.bb_models)} BB, {len(self.validity_models)} Validity, {len(self.vol_models)} Vol")
+        logger.info(f'模型加載完成:')
+        logger.info(f'  BB: {loaded_count["bb"]}標 (失敐: {failed_count["bb"]}標)')
+        logger.info(f'  Validity: {loaded_count["validity"]}標 (失敐: {failed_count["validity"]}標)')
+        logger.info(f'  Vol: {loaded_count["vol"]}標 (失敐: {failed_count["vol"]}標)')
     
     def predict_bb_touch(self, symbol, timeframe, features):
         """
@@ -130,17 +229,11 @@ class ModelManager:
             return None
         
         try:
-            # 特徵縮放
             features_scaled = models['scaler'].transform([features])
-            
-            # 預測
             prediction = models['model'].predict(features_scaled)[0]
             confidence = max(models['model'].predict_proba(features_scaled)[0])
-            
-            # 轉換標籤
             label_map = models['label_map'] or {0: 'none', 1: 'upper', 2: 'lower'}
             touch_type = label_map.get(prediction, 'none')
-            
             touched = touch_type != 'none'
             
             return {
@@ -150,7 +243,7 @@ class ModelManager:
                 'prediction': int(prediction)
             }
         except Exception as e:
-            logger.error(f"BB觸及預測失敗 {symbol} {timeframe}: {e}")
+            logger.error(f'BB觸厬預測失敐 {symbol} {timeframe}: {e}')
             return None
     
     def predict_validity(self, symbol, timeframe, features):
@@ -167,14 +260,10 @@ class ModelManager:
             return None
         
         try:
-            # 特徵縮放
             features_scaled = models['scaler'].transform([features])
-            
-            # 預測概率
             proba = models['model'].predict_proba(features_scaled)[0]
             valid_prob = float(proba[1]) if len(proba) > 1 else 0.5
             
-            # 判定有效性等級
             if valid_prob >= 0.75:
                 quality = 'excellent'
             elif valid_prob >= 0.65:
@@ -190,12 +279,12 @@ class ModelManager:
             
             return {
                 'valid': valid,
-                'probability': valid_prob * 100,  # 轉換為百分比
+                'probability': valid_prob * 100,
                 'quality': quality,
                 'confidence': valid_prob
             }
         except Exception as e:
-            logger.error(f"有效性預測失敗 {symbol} {timeframe}: {e}")
+            logger.error(f'有效性預測失敐 {symbol} {timeframe}: {e}')
             return None
     
     def predict_volatility(self, symbol, timeframe, features):
@@ -212,28 +301,21 @@ class ModelManager:
             return None
         
         try:
-            # 特徵縮放
             features_scaled = models['scaler'].transform([features])
-            
-            # 預測波動性
             predicted_vol = float(models['model'].predict(features_scaled)[0])
-            
-            # 判定是否會擴張（以平均波動性為基準）
-            # 假設基準波動性為1.0，>1.2表示會擴張
             will_expand = predicted_vol > 1.2
-            expansion_strength = max(0, (predicted_vol - 1.0) / 1.0)  # 正規化至0-1
+            expansion_strength = max(0, (predicted_vol - 1.0) / 1.0)
             
             return {
                 'predicted_vol': predicted_vol,
                 'will_expand': will_expand,
-                'expansion_strength': min(1.0, expansion_strength)  # 上限0-1
+                'expansion_strength': min(1.0, expansion_strength)
             }
         except Exception as e:
-            logger.error(f"波動性預測失敗 {symbol} {timeframe}: {e}")
+            logger.error(f'波動性預測失敐 {symbol} {timeframe}: {e}')
             return None
 
 
-# 全局模型管理器
 model_manager = ModelManager()
 
 # ============================================================
@@ -245,47 +327,38 @@ class FeatureExtractor:
     
     @staticmethod
     def extract_features(ohlcv_data):
-        """
-        提取基本特徵（需根據您的actual實現調整）
-        ohlcv_data: {'open', 'high', 'low', 'close', 'volume'}
-        """
+        """提取基本特徵"""
         features = []
         
         try:
-            # 基本特徵
             o, h, l, c, v = ohlcv_data.get('open'), ohlcv_data.get('high'), \
                             ohlcv_data.get('low'), ohlcv_data.get('close'), \
                             ohlcv_data.get('volume')
             
-            # 1. 價格相關特徵
-            body_ratio = (c - o) / (h - l + 1e-8)  # K棒實體比例
-            wick_ratio = min(h - max(o, c), min(o, c) - l) / (h - l + 1e-8)  # 影線比例
-            high_low_range = (h - l) / c  # 幅度比例
-            close_position = (c - l) / (h - l + 1e-8)  # 收盤位置
+            body_ratio = (c - o) / (h - l + 1e-8)
+            wick_ratio = min(h - max(o, c), min(o, c) - l) / (h - l + 1e-8)
+            high_low_range = (h - l) / c
+            close_position = (c - l) / (h - l + 1e-8)
             
             features.extend([body_ratio, wick_ratio, high_low_range, close_position])
             
-            # 2. 成交量特徵
-            vol_norm = v / (1e6 + 1e-8)  # 正規化成交量
+            vol_norm = v / (1e6 + 1e-8)
             features.append(vol_norm)
             
-            # 3. 簡單動能指標
-            price_slope = (c - o) / o  # 價格變化率
+            price_slope = (c - o) / o
             features.append(price_slope)
             
-            # 4. 時間特徵
             hour = datetime.now().hour
             is_high_volume_time = 1 if (hour >= 8 and hour <= 12) or (hour >= 20 and hour <= 23) else 0
             features.extend([hour, is_high_volume_time])
             
-            # 5. 補充特徵至16個（根據您的模型需要調整）
             while len(features) < 16:
                 features.append(0.0)
             
             return np.array(features[:16], dtype=np.float32)
         
         except Exception as e:
-            logger.error(f"特徵提取失敗: {e}")
+            logger.error(f'特徵提取失敐: {e}')
             return np.zeros(16, dtype=np.float32)
 
 
@@ -309,26 +382,7 @@ def health_check():
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    """
-    完整的三層預測端點
-    
-    請求格式:
-    {
-        "symbol": "BTCUSDT",
-        "timeframe": "15m",
-        "ohlcv": {"open": 45000, "high": 45500, "low": 44900, "close": 45200, "volume": 1000000}
-    }
-    
-    返回格式:
-    {
-        "symbol": "BTCUSDT",
-        "timeframe": "15m",
-        "bb_touch": {...},
-        "validity": {...},
-        "volatility": {...},
-        "signal": "BUY|SELL|NEUTRAL|HOLD"
-    }
-    """
+    """完整的三層預測端點"""
     try:
         data = request.get_json()
         
@@ -336,17 +390,14 @@ def predict():
         timeframe = data.get('timeframe', '15m')
         ohlcv = data.get('ohlcv', {})
         
-        # 驗證輸入
         if not symbol or symbol not in SYMBOLS:
             return jsonify({'error': f'無效的幣種: {symbol}'}), 400
         
         if timeframe not in TIMEFRAMES:
             return jsonify({'error': f'無效的時間框架: {timeframe}'}), 400
         
-        # 提取特徵
         features = FeatureExtractor.extract_features(ohlcv)
         
-        # 層級1：檢測BB觸及
         bb_result = model_manager.predict_bb_touch(symbol, timeframe, features)
         if not bb_result or not bb_result['touched']:
             return jsonify({
@@ -358,13 +409,8 @@ def predict():
                 'signal': 'NEUTRAL'
             })
         
-        # 層級2：檢測有效性
         validity_result = model_manager.predict_validity(symbol, timeframe, features)
-        
-        # 層級3：預測波動性
         vol_result = model_manager.predict_volatility(symbol, timeframe, features)
-        
-        # 生成交易信號
         signal = generate_signal(bb_result, validity_result, vol_result)
         
         return jsonify({
@@ -379,7 +425,7 @@ def predict():
         })
     
     except Exception as e:
-        logger.error(f"預測錯誤: {e}", exc_info=True)
+        logger.error(f'預測錯誤: {e}', exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -390,7 +436,7 @@ def predict_batch():
         data = request.get_json()
         symbols = data.get('symbols', SYMBOLS)
         timeframe = data.get('timeframe', '15m')
-        ohlcv_data = data.get('ohlcv_data', {})  # {symbol: ohlcv}
+        ohlcv_data = data.get('ohlcv_data', {})
         
         results = []
         for symbol in symbols:
@@ -405,7 +451,6 @@ def predict_batch():
             
             validity_result = model_manager.predict_validity(symbol, timeframe, features)
             vol_result = model_manager.predict_volatility(symbol, timeframe, features)
-            
             signal = generate_signal(bb_result, validity_result, vol_result)
             
             results.append({
@@ -424,25 +469,18 @@ def predict_batch():
         })
     
     except Exception as e:
-        logger.error(f"批量預測錯誤: {e}", exc_info=True)
+        logger.error(f'批量預測錯誤: {e}', exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
-# ============================================================
-# 輔助函數
-# ============================================================
-
 def generate_signal(bb_result, validity_result, vol_result):
-    """
-    根據三層模型結果生成交易信號
-    """
+    """根據三層模型結果生成交易信號"""
     if not bb_result or not bb_result['touched']:
         return 'NEUTRAL'
     
     if not validity_result:
         return 'NEUTRAL'
     
-    # 基於有效性
     quality_score = {
         'excellent': 4,
         'good': 3,
@@ -451,7 +489,6 @@ def generate_signal(bb_result, validity_result, vol_result):
         'poor': 0
     }.get(validity_result.get('quality', 'poor'), 0)
     
-    # 基於波動性
     vol_score = 0
     if vol_result:
         if vol_result.get('will_expand'):
@@ -461,7 +498,6 @@ def generate_signal(bb_result, validity_result, vol_result):
     
     total_score = quality_score + vol_score
     
-    # 生成信號
     if total_score >= 5:
         return 'STRONG_BUY' if bb_result['touch_type'] == 'lower' else 'STRONG_SELL'
     elif total_score >= 3:
@@ -477,32 +513,29 @@ def calculate_confidence(bb_result, validity_result, vol_result):
     if not bb_result:
         return 0.0
     
-    confidence = bb_result.get('confidence', 0.5) * 0.3  # BB權重30%
+    confidence = bb_result.get('confidence', 0.5) * 0.3
     
     if validity_result:
-        confidence += (validity_result.get('confidence', 0.5)) * 0.5  # Validity權重50%
+        confidence += (validity_result.get('confidence', 0.5)) * 0.5
     
     if vol_result:
-        confidence += (vol_result.get('expansion_strength', 0.5)) * 0.2  # Vol權重20%
+        confidence += (vol_result.get('expansion_strength', 0.5)) * 0.2
     
     return min(1.0, confidence)
 
 
-# ============================================================
-# 主程序
-# ============================================================
-
 if __name__ == '__main__':
-    logger.info("=" * 60)
-    logger.info("BB反彈ML系統 - 實時服務 V3")
-    logger.info("=" * 60)
-    logger.info("模型架構：")
-    logger.info("  層級1: BB Position Classifier (觸及檢測)")
-    logger.info("  層級2: Validity Detector (有效性判別)")
-    logger.info("  層級3: Volatility Predictor (波動性預測)")
-    logger.info("=" * 60)
+    logger.info('='*60)
+    logger.info('BB反彈ML系統 - 實時服務 V3')
+    logger.info('='*60)
+    logger.info('模型架構：')
+    logger.info('  層級1: BB Position Classifier (觸厬檢測)')
+    logger.info('  層級2: Validity Detector (有效性判別)')
+    logger.info('  層級3: Volatility Predictor (波動性預測)')
+    logger.info('='*60)
+    logger.info('修正: joblib + pickle 序列化錯誤已解決')
+    logger.info('='*60)
     
-    # 啟動Flask服務
     app.run(
         host='0.0.0.0',
         port=5000,
