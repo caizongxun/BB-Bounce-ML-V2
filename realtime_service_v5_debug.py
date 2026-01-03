@@ -121,13 +121,13 @@ class BBCalculator:
         if strategy == PredictionStrategy.PREVIOUS_COMPLETE:
             prediction_kline = klines_data[-2] if len(klines_data) >= 2 else klines_data[-1]
             kline_status = 'CLOSED'
-            logger.info(f'[K棒選擇] {symbol} {timeframe}: 使用上一根完整K棒 (已閉合)')
+            logger.info(f'[K棒選擇] {symbol} {timeframe}: 使用上一根完整K棍 (已閉合)')
         else:
             prediction_kline = klines_data[-1]
             current_time_ms = datetime.now().timestamp() * 1000
             is_closed = BBCalculator.is_kline_closed(prediction_kline['close_time'], current_time_ms)
             kline_status = 'CLOSED' if is_closed else 'FORMING'
-            logger.info(f'[K棒選擇] {symbol} {timeframe}: 使用最新K棒 (狀態={kline_status})')
+            logger.info(f'[K棒選擇] {symbol} {timeframe}: 使用最新K棍 (狀態={kline_status})')
         
         recent_closes = closes[-BB_PERIOD:]
         sma = np.mean(recent_closes)
@@ -136,14 +136,14 @@ class BBCalculator:
         lower = sma - BB_STD * std
         
         logger.info(f'[BB計算] {symbol} {timeframe}: 上={upper:.2f}, 中={sma:.2f}, 下={lower:.2f}')
-        logger.info(f'[預測K棒] {symbol} {timeframe}: close={prediction_kline["close"]:.2f}, high={prediction_kline["high"]:.2f}, low={prediction_kline["low"]:.2f}')
+        logger.info(f'[預測K棍] {symbol} {timeframe}: close={prediction_kline["close"]:.2f}, high={prediction_kline["high"]:.2f}, low={prediction_kline["low"]:.2f}')
         
         return float(upper), float(sma), float(lower), prediction_kline, kline_status
     
     @staticmethod
     def analyze_bb_status(symbol, timeframe, strategy=PredictionStrategy.PREVIOUS_COMPLETE):
         """
-        分析 K 棒是否接近/接觸 BB 軌道
+        分析 K 棍是否接近/接觸 BB 軌道
         """
         bb_upper, bb_middle, bb_lower, prediction_kline, kline_status = BBCalculator.calculate_bb(
             symbol, timeframe, strategy=strategy
@@ -273,11 +273,18 @@ class CompleteFeatureExtractor:
         rs = gains / (losses + 1e-8)
         rsi = 100 - (100 / (1 + rs))
         
-        # ATR
-        tr1 = highs[-14:] - lows[-14:]
-        tr2 = np.abs(highs[-14:] - closes[-14:][:-1] if len(closes) > 1 else 0)
-        tr3 = np.abs(lows[-14:] - closes[-14:][:-1] if len(closes) > 1 else 0)
-        atr = np.max([tr1, tr2, tr3], axis=0).mean()
+        # ATR - 修複：正確處理形狀不匹配
+        try:
+            tr1 = highs[-14:] - lows[-14:]
+            # 正確的 True Range 計算
+            close_prev = np.concatenate([[closes[-15]], closes[-14:-1]])
+            tr2 = np.abs(highs[-14:] - close_prev)
+            tr3 = np.abs(lows[-14:] - close_prev)
+            tr = np.maximum(tr1, np.maximum(tr2, tr3))
+            atr = np.mean(tr)
+        except Exception as e:
+            logger.warning(f'[指標計算] ATR 計算失敗: {e}，使用預設值')
+            atr = np.mean(highs[-14:] - lows[-14:])
         
         # EMA
         ema = closes[-5:].mean()  # 粗略 EMA
@@ -310,7 +317,7 @@ class CompleteFeatureExtractor:
         logger.info(f'[17特徵提取] {symbol} {timeframe}: 開始')
         
         try:
-            # 獲取 100 根K棒數據
+            # 獲取 100 根K棍數據
             logger.debug(f'[17特徵提取] 正在從 Binance 獲取數據...')
             closes, klines_data = BBCalculator.fetch_historical_closes(symbol, timeframe, limit=100)
             
@@ -322,7 +329,7 @@ class CompleteFeatureExtractor:
                 logger.error(f'[17特徵提取] {symbol}: 數據不足 (只有 {len(closes)} 根，需要 50 根)')
                 return None
             
-            logger.debug(f'[17特徵提取] 獲得 {len(closes)} 根K棒')
+            logger.debug(f'[17特徵提取] 獲得 {len(closes)} 根K棍')
             
             # 提取 OHLCV
             highs = np.array([k['high'] for k in klines_data])
@@ -340,7 +347,7 @@ class CompleteFeatureExtractor:
             curr_low = prediction_kline['low']
             curr_volume = prediction_kline['volume']
             
-            logger.debug(f'[17特徵提取] 當前K棒: close={curr_close:.2f}, high={curr_high:.2f}, low={curr_low:.2f}')
+            logger.debug(f'[17特徵提取] 當前K棍: close={curr_close:.2f}, high={curr_high:.2f}, low={curr_low:.2f}')
             
             # 提取 17 個特徵
             features = []
@@ -492,7 +499,7 @@ class ValidityChecker:
                 'quality': quality
             }
         except Exception as e:
-            logger.error(f'[有效性預測失敗] {e}')
+            logger.error(f'[有效性預測失敖] {e}')
             logger.error(traceback.format_exc())
             return None
 
@@ -561,7 +568,7 @@ class VolatilityPredictor:
                 'volatility_level': vol_level
             }
         except Exception as e:
-            logger.error(f'[波動性預測失敗] {e}')
+            logger.error(f'[波動性預測失敖] {e}')
             logger.error(traceback.format_exc())
             return None
 
@@ -589,7 +596,7 @@ def health_check():
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    """預測 K 棒是否接近/接觸 BB 軌道"""
+    """預測 K 棍是否接近/接觸 BB 軌道"""
     try:
         data = request.get_json()
         symbol = data.get('symbol', '').upper()
@@ -617,7 +624,7 @@ def predict():
             
             prediction_kline = bb_result['prediction_kline']
             if prediction_kline:
-                logger.debug(f'[模型] 預測K棒有效: {prediction_kline}')
+                logger.debug(f'[模型] 預測K棍有效: {prediction_kline}')
                 
                 # 提取 17 個特徵
                 features = CompleteFeatureExtractor.extract_17_features(symbol, timeframe, prediction_kline)
@@ -633,7 +640,7 @@ def predict():
                 else:
                     logger.warning(f'[特徵提取] {symbol}: 失敗 (返回 None)')
             else:
-                logger.warning(f'[模型] 預測K棒無效')
+                logger.warning(f'[模型] 預測K棍無效')
         else:
             logger.info(f'[模型] 跳過模型預測 (警告等級不符合條件)')
         
@@ -669,7 +676,7 @@ if __name__ == '__main__':
         logger.info('BB 反彈實時監控系統 V5 (調試版)')
         logger.info('=' * 60)
         logger.info('特徵: 17個完整特徵提取')
-        logger.info('BB計算: 使用上一根完整K棒')
+        logger.info('BB計算: 使用上一根完整K棍')
         logger.info('模型預測: 根據 warning_level (接近或匹警告時)')
         logger.info('=' * 60)
         
