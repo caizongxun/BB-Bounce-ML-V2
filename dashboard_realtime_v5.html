@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BB 反彈實時監控系統 V5 挂設版</title>
+    <title>BB 反彈實時監控系統 V5 正式版</title>
     <style>
         * {
             margin: 0;
@@ -66,16 +66,7 @@
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-
-        .status-dot.active {
             background: #4caf50;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
         }
 
         .tabs {
@@ -102,7 +93,7 @@
             font-weight: 600;
             cursor: pointer;
             position: relative;
-            transition: all 0.3s ease;
+            transition: color 0.2s ease;
             border-bottom: 3px solid transparent;
             margin-bottom: -1px;
         }
@@ -118,16 +109,10 @@
 
         .tab-content {
             display: none;
-            animation: fadeIn 0.3s ease;
         }
 
         .tab-content.active {
             display: block;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
         }
 
         .detail-section {
@@ -168,7 +153,7 @@
             border-radius: 8px;
             color: #e0e0e0;
             font-size: 14px;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
         }
 
         .input-group select:focus,
@@ -193,7 +178,7 @@
             font-weight: 600;
             font-size: 14px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
         }
 
         .btn-primary {
@@ -243,7 +228,7 @@
             word-break: break-all;
         }
 
-        /* 接近程度段 - 一直顯示 */
+        /* 接近程度段 - 無動畫 */
         .approaching-section {
             background: rgba(30, 30, 30, 0.6);
             border: 3px solid #00bcd4;
@@ -251,6 +236,7 @@
             padding: 25px;
             margin-top: 30px;
             box-shadow: 0 0 15px rgba(0, 188, 212, 0.15);
+            transition: border-color 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
         }
 
         .approaching-section.danger {
@@ -304,6 +290,7 @@
             border: 1px solid rgba(0, 188, 212, 0.2);
             border-radius: 8px;
             padding: 20px;
+            transition: border-color 0.3s ease;
         }
 
         .approaching-section.danger .approaching-item {
@@ -328,6 +315,7 @@
             font-family: 'Courier New', monospace;
             margin-bottom: 8px;
             color: #00bcd4;
+            transition: color 0.3s ease;
         }
 
         .approaching-section.danger .approaching-value {
@@ -354,7 +342,7 @@
         .progress-bar-fill {
             background: linear-gradient(90deg, #4caf50, #81c784);
             height: 100%;
-            transition: width 0.5s ease;
+            transition: width 0.3s ease, background 0.3s ease;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -365,7 +353,6 @@
 
         .approaching-section.danger .progress-bar-fill {
             background: linear-gradient(90deg, #f44336, #ef5350);
-            box-shadow: inset 0 0 10px rgba(255, 23, 68, 0.5), 0 0 15px rgba(244, 67, 54, 0.5);
         }
 
         .approaching-section.warning .progress-bar-fill {
@@ -390,7 +377,7 @@
             border-radius: 10px;
             padding: 15px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             backdrop-filter: blur(10px);
             position: relative;
             overflow: hidden;
@@ -524,7 +511,7 @@
             color: #e0e0e0;
         }
 
-        /* 逡診控制台 */
+        /* 診斷控制台 */
         .debug-panel {
             background: rgba(20, 20, 20, 0.8);
             border: 1px solid rgba(255, 193, 7, 0.3);
@@ -608,10 +595,10 @@
 <body>
     <div class="header">
         <div class="header-content">
-            <div class="logo">📈 BB 反彈實時監控系統 V5 挂設版</div>
+            <div class="logo">BB 反彈實時監控系統 V5 正式版</div>
             <div class="status-info">
                 <div class="status-item">
-                    <div class="status-dot active"></div>
+                    <div class="status-dot"></div>
                     <span>API 連接: <span id="api-status">就緒</span></span>
                 </div>
                 <div class="status-item">
@@ -623,29 +610,29 @@
 
     <div class="tabs">
         <div class="tab-buttons">
-            <button class="tab-button active" onclick="switchTab(0)">詳細分析</button>
-            <button class="tab-button" onclick="switchTab(1)">所有幣種監控</button>
+            <button class="tab-button active" onclick="switchTab(0)">交易對詳細分析</button>
+            <button class="tab-button" onclick="switchTab(1)">實時監控面板</button>
         </div>
 
         <!-- Tab 0: 詳細分析 -->
         <div class="tab-content active">
             <div class="detail-section">
-                <h2 style="margin-bottom: 20px; color: #00bcd4;">幣種詳細分析</h2>
+                <h2 style="margin-bottom: 20px; color: #00bcd4;">交易對詳細分析</h2>
                 
                 <div class="control-group">
                     <div class="input-group">
-                        <label>選擇幣種</label>
+                        <label>交易對</label>
                         <select id="symbol-select">
-                            <option value="BTCUSDT">Bitcoin (BTCUSDT)</option>
-                            <option value="ETHUSDT">Ethereum (ETHUSDT)</option>
-                            <option value="BNBUSDT">Binance Coin (BNBUSDT)</option>
-                            <option value="ADAUSDT">Cardano (ADAUSDT)</option>
-                            <option value="XRPUSDT">Ripple (XRPUSDT)</option>
-                            <option value="DOGEUSDT">Dogecoin (DOGEUSDT)</option>
-                            <option value="SOLUSDT">Solana (SOLUSDT)</option>
-                            <option value="LTCUSDT">Litecoin (LTCUSDT)</option>
-                            <option value="AVAXUSDT">Avalanche (AVAXUSDT)</option>
-                            <option value="LINKUSDT">Chainlink (LINKUSDT)</option>
+                            <option value="BTCUSDT">比特幣 (BTCUSDT)</option>
+                            <option value="ETHUSDT">以太坊 (ETHUSDT)</option>
+                            <option value="BNBUSDT">幣安幣 (BNBUSDT)</option>
+                            <option value="ADAUSDT">卡爾達誾 (ADAUSDT)</option>
+                            <option value="XRPUSDT">瑞波 (XRPUSDT)</option>
+                            <option value="DOGEUSDT">狗狗幣 (DOGEUSDT)</option>
+                            <option value="SOLUSDT">索拉納 (SOLUSDT)</option>
+                            <option value="LTCUSDT">萊特幣 (LTCUSDT)</option>
+                            <option value="AVAXUSDT">雪崩 (AVAXUSDT)</option>
+                            <option value="LINKUSDT">鏈環 (LINKUSDT)</option>
                             <option value="UNIUSDT">Uniswap (UNIUSDT)</option>
                             <option value="ATOMUSDT">Cosmos (ATOMUSDT)</option>
                             <option value="MATICUSDT">Polygon (MATICUSDT)</option>
@@ -656,13 +643,13 @@
                             <option value="ARBUSDT">Arbitrum (ARBUSDT)</option>
                             <option value="ALGOUSDT">Algorand (ALGOUSDT)</option>
                             <option value="NEARUSDT">Near (NEARUSDT)</option>
-                            <option value="BCHUSDT">Bitcoin Cash (BCHUSDT)</option>
-                            <option value="ETCUSDT">Ethereum Classic (ETCUSDT)</option>
+                            <option value="BCHUSDT">比特幣現金 (BCHUSDT)</option>
+                            <option value="ETCUSDT">以太坊經典 (ETCUSDT)</option>
                         </select>
                     </div>
 
                     <div class="input-group">
-                        <label>時間框架</label>
+                        <label>時間週期</label>
                         <select id="timeframe-select">
                             <option value="15m">15 分鐘</option>
                             <option value="1h">1 小時</option>
@@ -670,46 +657,46 @@
                     </div>
 
                     <div class="button-group">
-                        <button class="btn btn-primary" onclick="updateDetailedAnalysis()">🔍 立即分析</button>
+                        <button class="btn btn-primary" onclick="updateDetailedAnalysis()">分析</button>
                     </div>
                 </div>
 
                 <div class="detail-panel" id="detail-content">
                     <div class="empty-state">
-                        <div class="empty-state-title">ℹ️ 醫一事項</div>
-                        <p>選擇幣種和時間框架後點擊「立即分析」開始</p>
+                        <div class="empty-state-title">提示</div>
+                        <p>選擇交易對和時間週期後點擊「分析」開始</p>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Tab 1: 所有幣種監控 -->
+        <!-- Tab 1: 實時監控面板 -->
         <div class="tab-content">
             <div class="detail-section">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
-                    <h2 style="color: #00bcd4;">所有幣種監控面板 (每 5 秒更新)</h2>
-                    <button class="btn-primary" style="padding: 8px 16px; border: none; background: linear-gradient(135deg, #00bcd4, #4dd0e1); color: #0f0f0f; border-radius: 6px; cursor: pointer;" onclick="updateAllSymbols()">🔁 手動刷新</button>
+                    <h2 style="color: #00bcd4;">實時監控面板 (每 5 秒更新)</h2>
+                    <button class="btn-primary" style="padding: 8px 16px; border: none; background: linear-gradient(135deg, #00bcd4, #4dd0e1); color: #0f0f0f; border-radius: 6px; cursor: pointer;" onclick="updateAllSymbols()">手動刷新</button>
                 </div>
 
                 <div id="symbols-container" class="symbols-grid">
-                    <div class="loading-text">正在加載幣種數據...</div>
+                    <div class="loading-text">正在加載監控數據...</div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 逡診控制台 -->
+    <!-- 診斷控制台 -->
     <div style="max-width: 1400px; margin: 30px auto; padding: 0 20px;">
         <div class="debug-panel">
-            <div class="debug-title">📋 逡診控制台 (Debug Console)</div>
-            <div class="debug-log" id="debug-log">等候活動...</div>
+            <div class="debug-title">診斷日誌</div>
+            <div class="debug-log" id="debug-log">等待操作中...</div>
         </div>
     </div>
 
-    <!-- 頁脚 -->
+    <!-- 頁腳 -->
     <div style="text-align: center; padding: 30px; color: #80d0d8; font-size: 12px; border-top: 1px solid rgba(0, 188, 212, 0.2);">
-        <p>👋 BB 反彈實時監控系統 V5 挂設版</p>
-        <p style="margin-top: 8px; opacity: 0.7;">直接 BB 計算 | 三級接近提示 | 無需機器學習模型</p>
+        <p>BB 反彈實時監控系統 V5 正式版</p>
+        <p style="margin-top: 8px; opacity: 0.7;">布林通道直接計算 | 接近程度實時預警 | 機料学習輔助判斷</p>
     </div>
 
     <script>
@@ -726,7 +713,7 @@
         let detailInterval = null;
         let allSymbolsInterval = null;
 
-        // 逡診日誌
+        // 診斷日誌
         function addDebugLog(message, type = 'info') {
             const timestamp = new Date().toLocaleTimeString('zh-TW', { hour12: false });
             debugLogs.push({ message, type, timestamp });
@@ -765,7 +752,7 @@
                 }
                 return null;
             } catch (error) {
-                addDebugLog(`[Binance] ${symbol} 取得失效: ${error.message}`, 'error');
+                addDebugLog(`[Binance] ${symbol} 市場數據獲取失敗: ${error.message}`, 'error');
                 return null;
             }
         }
@@ -791,18 +778,18 @@
             const timeframe = document.getElementById('timeframe-select').value;
             const container = document.getElementById('detail-content');
 
-            addDebugLog(`[分析] 開始 ${symbol} ${timeframe}`, 'info');
-            container.innerHTML = '<div class="loading-text">🔍 正在加載...</div>';
+            addDebugLog(`[分析] 開始分析 ${symbol} ${timeframe}`, 'info');
+            container.innerHTML = '<div class="loading-text">正在分析...</div>';
             
             try {
                 const ohlcv = await fetchOHLCV(symbol, timeframe);
                 if (!ohlcv) {
-                    addDebugLog(`[錯誤] 無法取得 ${symbol}`, 'error');
-                    container.innerHTML = `<div class="empty-state"><div class="empty-state-title">❌ 錯誤</div></div>`;
+                    addDebugLog(`[錯誤] 無法獲取 ${symbol} 市場數據`, 'error');
+                    container.innerHTML = `<div class="empty-state"><div class="empty-state-title">錯誤</div></div>`;
                     return;
                 }
 
-                addDebugLog(`[API] 調用 ${API_BASE}/predict...`, 'info');
+                addDebugLog(`[API] 正在調用預測服務...`, 'info');
                 const response = await fetch(`${API_BASE}/predict`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -816,16 +803,16 @@
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
                 const data = await response.json();
-                addDebugLog(`[API] 返回成功`, 'success');
+                addDebugLog(`[API] 預測成功`, 'success');
                 
                 const bb = data.bb_touch;
-                addDebugLog(`[BB] status=${bb.status}, direction=${bb.direction}, distance=${bb.distance_percent.toFixed(3)}%`, 'info');
+                addDebugLog(`[布林通道] 狀態=${bb.status}, 方向=${bb.direction}, 距離=${bb.distance_percent.toFixed(3)}%`, 'info');
                 
                 container.innerHTML = renderDetailPanel(data, symbol, timeframe, ohlcv);
                 updateTimestamp();
             } catch (error) {
                 addDebugLog(`[錯誤] ${error.message}`, 'error');
-                container.innerHTML = `<div class="empty-state"><div class="empty-state-title">❌ 錯誤</div></div>`;
+                container.innerHTML = `<div class="empty-state"><div class="empty-state-title">錯誤</div></div>`;
             }
         }
 
@@ -842,44 +829,45 @@
             else if (warning === 'caution') sectionClass = 'warning';
 
             let statusText = '正常';
-            let directionEmoji = '';
+            let directionText = '';
             if (status === 'touched') {
-                statusText = '🚨 已接觸!';
-                directionEmoji = direction === 'upper' ? '⬆️ 上' : '⬇️ 下';
+                statusText = '觸及邊界';
+                directionText = direction === 'upper' ? '上軌' : '下軌';
             } else if (status === 'approaching') {
-                statusText = '⚠️ 接近中';
-                directionEmoji = direction === 'upper' ? '⬆️ 上' : '⬇️ 下';
+                statusText = '接近預警';
+                directionText = direction === 'upper' ? '上軌' : '下軌';
             } else {
-                statusText = '✅ 安全';
+                statusText = '正常';
+                directionText = '——';
             }
             
             const fillPercent = Math.min((distance / 0.5) * 100, 100);
             const warningTextMap = {
-                'danger': '🚨 灾難! 上活推職接觸!',
-                'warning': '⚠️ 警告 - 非常接近',
-                'caution': '⛳ 注意 - 輹族訊号',
-                'none': '✅ 安全'
+                'danger': '危險等級 - 已接近邊界',
+                'warning': '警告等級 - 接近中',
+                'caution': '注意等級 - 逐漸接近',
+                'none': '正常 - 距離充分'
             };
 
             const approachingHTML = `
                 <div class="approaching-section ${sectionClass}">
-                    <div class="approaching-title">📈 當前接近程度</div>
+                    <div class="approaching-title">實時接近程度評估</div>
                     <div class="approaching-grid">
                         <div class="approaching-item">
-                            <div class="approaching-label">方向</div>
-                            <div class="approaching-value" style="font-size: 18px;">${direction ? directionEmoji : '— 正常'}</div>
-                            <div class="approaching-label" style="margin-top: 12px;">狀態</div>
-                            <div class="approaching-value" style="font-size: 16px;">${statusText}</div>
+                            <div class="approaching-label">目標軌道</div>
+                            <div class="approaching-value" style="font-size: 20px;">${directionText}</div>
+                            <div class="approaching-label" style="margin-top: 12px;">系統狀態</div>
+                            <div class="approaching-value" style="font-size: 18px;">${statusText}</div>
                         </div>
                         <div class="approaching-item">
-                            <div class="approaching-label">距離 (%)</div>
-                            <div class="approaching-value">${distance.toFixed(3)}%</div>
+                            <div class="approaching-label">距離百分比 (%)</div>
+                            <div class="approaching-value">${distance.toFixed(4)}%</div>
                             <div class="progress-bar-container">
                                 <div class="progress-bar-fill" style="width: ${fillPercent}%;">
                                     ${distance.toFixed(2)}%
                                 </div>
                             </div>
-                            <div class="approaching-label" style="margin-top: 12px;">警告等級</div>
+                            <div class="approaching-label" style="margin-top: 12px;">風險計稜</div>
                             <div class="approaching-value" style="font-size: 14px;">${warningTextMap[warning]}</div>
                         </div>
                     </div>
@@ -889,28 +877,28 @@
             return `
                 <div class="detail-grid">
                     <div class="detail-item">
-                        <div class="detail-label">📄 幣种</div>
+                        <div class="detail-label">交易對</div>
                         <div class="detail-value">${symbol}</div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">⏰ 時間框架</div>
+                        <div class="detail-label">時間週期</div>
                         <div class="detail-value">${timeframe}</div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">💵 當前价格</div>
+                        <div class="detail-label">現價 (收盤價)</div>
                         <div class="detail-value" style="color: #4dd0e1;">${ohlcv.close.toFixed(2)}</div>
                     </div>
                     ${bb.bb_upper ? `
                         <div class="detail-item">
-                            <div class="detail-label">🔥 BB 上軌</div>
+                            <div class="detail-label">布林上軌</div>
                             <div class="detail-value" style="color: #f44336;">${parseFloat(bb.bb_upper).toFixed(2)}</div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">🎯 BB 中线</div>
+                            <div class="detail-label">布林中線</div>
                             <div class="detail-value" style="color: #ffc107;">${parseFloat(bb.bb_middle).toFixed(2)}</div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">❄️ BB 下軌</div>
+                            <div class="detail-label">布林下軌</div>
                             <div class="detail-value" style="color: #4caf50;">${parseFloat(bb.bb_lower).toFixed(2)}</div>
                         </div>
                     ` : ''}
@@ -921,11 +909,11 @@
 
         async function updateAllSymbols() {
             const container = document.getElementById('symbols-container');
-            addDebugLog('[所有] 開始更新 22 個幣種', 'info');
+            addDebugLog('[实斶監控] 開始更新全市場数据', 'info');
             
             try {
                 let html = '';
-                let approaching_count = 0;
+                let critical_count = 0;
                 
                 for (const symbol of SYMBOLS) {
                     const ohlcv = await fetchOHLCV(symbol, '15m');
@@ -944,11 +932,11 @@
                     const data = await response.json();
                     const card = renderSymbolCard(data, symbol, ohlcv);
                     html += card.html;
-                    if (card.critical) approaching_count++;
+                    if (card.critical) critical_count++;
                 }
                 
-                container.innerHTML = html || '<div class="empty-state"><div class="empty-state-title">❌ 沒有數据</div></div>';
-                addDebugLog(`[所有] 完成! 找到 ${approaching_count} 個危險磊情。`, 'success');
+                container.innerHTML = html || '<div class="empty-state"><div class="empty-state-title">無數据</div></div>';
+                addDebugLog(`[監控] 更新完成 - 検測到 ${critical_count} 個位置風險`, 'success');
                 updateTimestamp();
             } catch (error) {
                 addDebugLog(`[錯誤] ${error.message}`, 'error');
@@ -963,16 +951,16 @@
             const warning = bb.warning_level || 'none';
             
             let cardClass = 'symbol-card';
-            let statusText = '✅ 正常';
+            let statusText = '正常';
             let isCritical = false;
             
             if (warning === 'danger') {
                 cardClass += ' danger';
-                statusText = '🚨 危險!';
+                statusText = '危險';
                 isCritical = true;
             } else if (warning === 'warning') {
                 cardClass += ' warning';
-                statusText = '⚠️ 警告';
+                statusText = '警告';
                 isCritical = true;
             }
             
@@ -987,11 +975,11 @@
                     <div class="symbol-info">
                         <div class="symbol-metric">
                             <div class="symbol-metric-label">距離 (%)</div>
-                            <div class="symbol-metric-value">${distance.toFixed(3)}%</div>
+                            <div class="symbol-metric-value">${distance.toFixed(4)}%</div>
                         </div>
                         <div class="symbol-metric">
                             <div class="symbol-metric-label">方向</div>
-                            <div class="symbol-metric-value">${direction ? (direction === 'upper' ? '⬆️' : '⬇️') : '—'}</div>
+                            <div class="symbol-metric-value">${direction ? (direction === 'upper' ? '上軌' : '下軌') : '——'}</div>
                         </div>
                     </div>
             `;
@@ -1000,19 +988,19 @@
                 html += `
                     <div class="symbol-bb">
                         <div class="symbol-bb-item">
-                            <div class="symbol-bb-label">上</div>
+                            <div class="symbol-bb-label">上軌</div>
                             <div class="symbol-bb-value">${parseFloat(bb.bb_upper).toFixed(0)}</div>
                         </div>
                         <div class="symbol-bb-item">
-                            <div class="symbol-bb-label">中</div>
+                            <div class="symbol-bb-label">中線</div>
                             <div class="symbol-bb-value">${parseFloat(bb.bb_middle).toFixed(0)}</div>
                         </div>
                         <div class="symbol-bb-item">
-                            <div class="symbol-bb-label">下</div>
+                            <div class="symbol-bb-label">下軌</div>
                             <div class="symbol-bb-value">${parseFloat(bb.bb_lower).toFixed(0)}</div>
                         </div>
                         <div class="symbol-bb-item">
-                            <div class="symbol-bb-label">現</div>
+                            <div class="symbol-bb-label">現價</div>
                             <div class="symbol-bb-value">${ohlcv.close.toFixed(0)}</div>
                         </div>
                     </div>
@@ -1034,10 +1022,10 @@
 
         function startDetailUpdate() {
             if (detailInterval) clearInterval(detailInterval);
-            updateDetailedAnalysis();  // 需立即更新一次
+            updateDetailedAnalysis();
             detailInterval = setInterval(() => {
                 updateDetailedAnalysis();
-            }, 5000);  // 5秒更新一次，沒有闪爆
+            }, 5000);
         }
 
         function stopDetailUpdate() {
@@ -1046,14 +1034,14 @@
 
         function startAllSymbolsUpdate() {
             if (allSymbolsInterval) clearInterval(allSymbolsInterval);
-            updateAllSymbols();  // 需立即更新一次
+            updateAllSymbols();
             allSymbolsInterval = setInterval(() => {
                 updateAllSymbols();
-            }, 5000);  // 5秒更新一次
+            }, 5000);
         }
 
         window.addEventListener('load', () => {
-            addDebugLog('[起動] 頁面已加載', 'success');
+            addDebugLog('[系統] 正慧時監控系統已啟動', 'success');
             startDetailUpdate();
         });
 
