@@ -125,7 +125,7 @@ class BBCalculator:
         return current_time >= kline_close_time
     
     @staticmethod
-    def calculate_bb(symbol, timeframe, current_ohlcv, strategy=PredictionStrategy.PREVIOUS_COMPLETE):
+    def calculate_bb(symbol, timeframe, strategy=PredictionStrategy.PREVIOUS_COMPLETE):
         """計算 BB 通道值
         
         改進邊連輯：
@@ -181,17 +181,18 @@ class BBCalculator:
         return float(upper), float(sma), float(lower), prediction_kline, kline_status
     
     @staticmethod
-    def analyze_bb_status(symbol, timeframe, current_ohlcv, strategy=PredictionStrategy.PREVIOUS_COMPLETE):
+    def analyze_bb_status(symbol, timeframe, strategy=PredictionStrategy.PREVIOUS_COMPLETE):
         """
         分析 K 棒是否接近/接觸 BB 軌道
         
         重要改進：
-        - 使用上一根完全形成的K棒做預測
-        - 避免預測結果隨著當前K棒價格跳動而閃爍
+        - 不接受當前K棒價格 ohlcv
+        - 自己從 Binance 獲取完整歷史數據和計算
+        - 使用策略決定的K棒做預測
         """
         # 計算 BB
         bb_upper, bb_middle, bb_lower, prediction_kline, kline_status = BBCalculator.calculate_bb(
-            symbol, timeframe, current_ohlcv, strategy=strategy
+            symbol, timeframe, strategy=strategy
         )
         
         if bb_upper is None:
@@ -209,7 +210,7 @@ class BBCalculator:
                 'prediction_kline': None,
             }
         
-        # 使用預測K棒的數據（而不是當前K棒的實時價格）
+        # 使用預測K棒的數據
         pred_close = prediction_kline.get('close', 0)
         pred_high = prediction_kline.get('high', 0)
         pred_low = prediction_kline.get('low', 0)
@@ -505,32 +506,34 @@ def health_check():
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    """預測 K 棒是否接近/接觸 BB 軌道"""
+    """預測 K 棒是否接近/接觸 BB 軌道
+    
+    簡化: 不再接收前端傳來的 ohlcv
+           先端只需傳 symbol 和 timeframe
+    """
     try:
         data = request.get_json()
         symbol = data.get('symbol', '').upper()
         timeframe = data.get('timeframe', '15m')
-        ohlcv = data.get('ohlcv', {})
         
         if not symbol or symbol not in SYMBOLS:
             return jsonify({'error': f'無效的幣種: {symbol}'}), 400
         if timeframe not in TIMEFRAMES:
             return jsonify({'error': f'無效的時間框架: {timeframe}'}), 400
         
-        logger.info(f'\n[請求] {symbol} {timeframe} - 現價={ohlcv.get("close", 0):.2f}')
+        logger.info(f'\n[請求] {symbol} {timeframe}')
         
-        # 第一步: 先檢測接近/接觸（純計算）
-        bb_result = BBCalculator.analyze_bb_status(symbol, timeframe, ohlcv, strategy=CURRENT_STRATEGY)
+        # 第一步: 計算 BB (自動策略選擇K棒)
+        bb_result = BBCalculator.analyze_bb_status(symbol, timeframe, strategy=CURRENT_STRATEGY)
         
         # 第二步: 只有接近/接觸時才調用模型
-        # 重要：用預測K棒做有效性和波動性預測（而不是當前K棒）
         validity_result = None
         volatility_result = None
         
         if bb_result['status'] in ['approaching', 'touched']:
             logger.info(f'[模型] 觸發模型預測 (狀態={bb_result["status"]})')
             
-            # 統一用預測K棒（與BB一根的）做有效性/波動性預測
+            # 統一用預測K棒做有效性/波動性預測
             prediction_kline = bb_result['prediction_kline']
             if prediction_kline:
                 logger.info(f'[預測踊下文] 使用同一K棒：close={prediction_kline["close"]:.2f}')
@@ -571,8 +574,8 @@ if __name__ == '__main__':
         logger.info('BB 反彈實時監控系統 V5 (簡化版)')
         logger.info('=' * 60)
         logger.info('流程：')
-        logger.info('  1. 使用 Binance 完整歷史數據計算 BB 通道')
-        logger.info('  2. 不再依賴內存 history')
+        logger.info('  1. 不再依賴前端傳故的價格')
+        logger.info('  2. 後端自動從 Binance 獲取完整歷史數據')
         logger.info(f'  3. 使用{CURRENT_STRATEGY}策略預測：')
         logger.info('     - PREVIOUS_COMPLETE: 使用上一根完全K棒（推薦）')
         logger.info('     - LATEST_INCOMPLETE: 使用最新K棒（敏感但閃爍）')
