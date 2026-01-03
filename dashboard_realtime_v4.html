@@ -265,7 +265,7 @@
             color: #ffc107;
         }
 
-        /* 接近程度段 - 這是關鍵！箋染下方 */
+        /* 接近程度段 - 這是關鍵！ */
         .approaching-progress {
             background: rgba(30, 30, 30, 0.6);
             border: 1px solid rgba(0, 188, 212, 0.2);
@@ -789,10 +789,12 @@
                 });
 
                 const data = await response.json();
+                console.log('API Response:', data); // 逡診日誌
                 // 一次性渲染整个HTML（第一次或切换幣种时）
                 container.innerHTML = renderDetailPanel(data, symbol, timeframe, ohlcv);
                 updateTimestamp();
             } catch (error) {
+                console.error('Error:', error);
                 container.innerHTML = `<div class="empty-state"><div class="empty-state-title">錯誤</div><p>${error.message}</p></div>`;
             }
         }
@@ -821,12 +823,19 @@
             else if (volLevel === 'high') volClass = 'vol-high';
             else if (volLevel === 'moderate') volClass = 'vol-moderate';
 
-            // 接近程度 HTML - 关键！晎渲下方
+            // 接近程度 HTML - 關鍵！侘化的醫板棄出邏輫
             let approachingHTML = '';
-            if (bb.bb_upper && bb.current_high) {
-                const distToUpper = ((bb.bb_upper - bb.current_high) / bb.current_high * 100).toFixed(2);
-                const distToLower = ((bb.current_low - bb.bb_lower) / bb.current_low * 100).toFixed(2);
-                const maxDist = 5; // 最大显示 5%
+            
+            // 修正：確保 bb 有 current_high 和 current_low 屬性
+            if (bb && typeof bb === 'object' && bb.current_high !== undefined && bb.current_low !== undefined && bb.bb_upper !== undefined && bb.bb_lower !== undefined) {
+                const currentHigh = parseFloat(bb.current_high);
+                const currentLow = parseFloat(bb.current_low);
+                const bbUpper = parseFloat(bb.bb_upper);
+                const bbLower = parseFloat(bb.bb_lower);
+                
+                const distToUpper = ((bbUpper - currentHigh) / (currentHigh || 1) * 100).toFixed(2);
+                const distToLower = ((currentLow - bbLower) / (currentLow || 1) * 100).toFixed(2);
+                const maxDist = 5; // 最大顯示 5%
 
                 approachingHTML = `
                     <div class="approaching-progress">
@@ -904,11 +913,11 @@
                         </div>
                         <div class="detail-item">
                             <div class="detail-label">当前高点</div>
-                            <div class="detail-value">${parseFloat(bb.current_high).toFixed(2)}</div>
+                            <div class="detail-value">${parseFloat(bb.current_high || 0).toFixed(2)}</div>
                         </div>
                         <div class="detail-item">
                             <div class="detail-label">当前低点</div>
-                            <div class="detail-value">${parseFloat(bb.current_low).toFixed(2)}</div>
+                            <div class="detail-value">${parseFloat(bb.current_low || 0).toFixed(2)}</div>
                         </div>
                     ` : ''}
                 </div>
@@ -974,11 +983,16 @@
             const now = new Date();
             const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
 
-            // 距离进度条 HTML
+            // 距离進度條 HTML
             let distanceHTML = '';
-            if (bb.bb_upper && bb.current_high) {
-                const distToUpper = ((bb.bb_upper - bb.current_high) / bb.current_high * 100).toFixed(2);
-                const distToLower = ((bb.current_low - bb.bb_lower) / bb.current_low * 100).toFixed(2);
+            if (bb && typeof bb === 'object' && bb.current_high !== undefined && bb.current_low !== undefined && bb.bb_upper !== undefined && bb.bb_lower !== undefined) {
+                const currentHigh = parseFloat(bb.current_high);
+                const currentLow = parseFloat(bb.current_low);
+                const bbUpper = parseFloat(bb.bb_upper);
+                const bbLower = parseFloat(bb.bb_lower);
+                
+                const distToUpper = ((bbUpper - currentHigh) / (currentHigh || 1) * 100).toFixed(2);
+                const distToLower = ((currentLow - bbLower) / (currentLow || 1) * 100).toFixed(2);
                 const maxDist = 5;
 
                 distanceHTML = `
@@ -1046,7 +1060,7 @@
         function updateTimestamp() {
             const now = new Date();
             const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
-            document.getElementById('last-update').textContent = `最会更新: ${timeStr}`;
+            document.getElementById('last-update').textContent = `最後更新: ${timeStr}`;
         }
 
         function toggleAutoUpdate() {
