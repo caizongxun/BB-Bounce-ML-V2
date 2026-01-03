@@ -1,12 +1,13 @@
 """
-BB反彈ML系統 - 實時服務 V3 (修載第三輬修載)
+BB反彈ML系統 - 實時服務 V3 (修載第九輫修載)
 支持三層模型整合：BB觸厬檢測 + 有效性判別 + 波動性預測
 修載：
 1. pickle/joblib 序列化不一致問題
 2. BB 模型特徵數量不匹配 (16 -> 12)
 3. 波動性模型特徵數量不匹配 (3 -> 15)
-4. BB 觸及位置分類預測邏輯 (「觸及是但位置未知」矛盾)
+4. BB 觸厬位置分類阈測邏輯 (「觸厬是但位置未知」矛牶)
 5. JSON 序列化錯誤 - label_map 鍵型別混合
+6. label_map 映射錯誤 - 數字映射到數字而不是文字
 """
 
 import os
@@ -423,6 +424,50 @@ class VolatilityFeatureExtractor:
         return np.array(features, dtype=np.float32)
 
 # ============================================================
+# 修載：Label Map 致化函數
+# ============================================================
+
+def normalize_label_map(label_map):
+    """
+    正常化 label_map：
+    - 将任何整數键轉換為整數
+    - 將任何值致化為字符串
+    - 專條处理諤異的映射（例如 {-1: 0, 0: 1, 1: 2}）
+    """
+    if not label_map:
+        return {0: 'lower', 1: 'none', 2: 'upper'}
+    
+    try:
+        # 情形入1: {-1: 0, 0: 1, 1: 2} 映射回 {0: 'lower', 1: 'none', 2: 'upper'}
+        if label_map == {-1: 0, 0: 1, 1: 2} or label_map == {'-1': '0', '0': '1', '1': '2'}:
+            logger.debug('棄骬被 label_map 例子')
+            return {0: 'lower', 1: 'none', 2: 'upper'}
+        
+        # 情形入2: 棄骬是不符常的集合，停作方案
+        normalized = {}
+        for k, v in label_map.items():
+            # 整數键轉整數
+            k_int = int(k) if isinstance(k, (int, np.integer)) else int(str(k))
+            # 显示優先当作值：字符串 -> 整数 -> 优予
+            if isinstance(v, str):
+                v_str = v
+            elif isinstance(v, (int, np.integer)):
+                # 判断是否是整数，然后轉換為標籤
+                v_map = {0: 'lower', 1: 'none', 2: 'upper'}
+                v_str = v_map.get(int(v), f'class_{v}')
+            else:
+                v_str = str(v)
+            
+            normalized[k_int] = v_str
+        
+        logger.debug(f'正常化二 label_map: {label_map} -> {normalized}')
+        return normalized
+    
+    except Exception as e:
+        logger.warning(f'正常化 label_map 失敗: {e}，使用預設')
+        return {0: 'lower', 1: 'none', 2: 'upper'}
+
+# ============================================================
 # 模型管理器
 # ============================================================
 
@@ -455,7 +500,7 @@ class ModelManager:
                     logger.info(f'已加載: {full_path.name}')
                     return model
             except Exception as e:
-                logger.error(f'加載失敗 {full_path}: {str(e)[:100]}')
+                logger.error(f'加載失敷 {full_path}: {str(e)[:100]}')
         
         return None
     
@@ -478,10 +523,13 @@ class ModelManager:
                         bb_label_map = self._load_model_file(bb_path, 'label_map.pkl')
                         
                         if bb_model and bb_scaler:
+                            # 正常化 label_map
+                            bb_label_map_normalized = normalize_label_map(bb_label_map)
+                            
                             self.bb_models[(symbol, timeframe)] = {
                                 'model': bb_model,
                                 'scaler': bb_scaler,
-                                'label_map': bb_label_map
+                                'label_map': bb_label_map_normalized
                             }
                             loaded_count['bb'] += 1
                         else:
@@ -549,14 +597,11 @@ class ModelManager:
             probabilities = models['model'].predict_proba(features_scaled)[0]
             confidence = float(np.max(probabilities))
             
-            # 修載：轉換 label_map 以確保所有鍵都是字符串
-            label_map = models['label_map'] or {0: 'lower', 1: 'none', 2: 'upper'}
-            
-            # 強制轉換為字符串鍵
-            label_map_str = {str(k): str(v) for k, v in label_map.items()}
+            # 使用正常化的 label_map
+            label_map = models['label_map']
             
             best_class = np.argmax(probabilities)
-            touch_type = label_map_str.get(str(best_class), 'unknown')
+            touch_type = label_map.get(best_class, 'unknown')
             touched = (best_class != 1) and (confidence > 0.3)
             
             if not touched:
@@ -567,10 +612,10 @@ class ModelManager:
                 'touch_type': touch_type,
                 'confidence': float(confidence),
                 'prediction': int(best_class),
-                'probabilities': {str(label_map_str.get(str(i), f'class_{i}')): float(p) for i, p in enumerate(probabilities)}
+                'probabilities': {label_map.get(i, f'class_{i}'): float(p) for i, p in enumerate(probabilities)}
             }
         except Exception as e:
-            logger.error(f'BB觸及預測失敗 {symbol} {timeframe}: {e}')
+            logger.error(f'BB觸厬預測失敗 {symbol} {timeframe}: {e}')
             return None
     
     def predict_validity(self, symbol, timeframe, ohlcv_data):
