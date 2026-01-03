@@ -3,6 +3,7 @@
 BB反彈ML系統 - 實時服務 V5 (正式版)
 提取完整 17 個特徵符合訓練模型的需求
 修複 ATR 計算的 numpy 形狀不匹配問題
+修複波動性強度計算邊伏掩展倍數
 """
 
 import numpy as np
@@ -472,22 +473,33 @@ class VolatilityPredictor:
             features_scaled = scaler.transform([features_vol])
             predicted_vol = float(model.predict(features_scaled)[0])
             
-            will_expand = predicted_vol > 1.2
-            expansion_strength = max(0, (predicted_vol - 1.0) / 1.0)
+            # 掩展倍數: 預測波動性 的數值
+            # 正常波動: 0.01-0.03 (1%-3%)
+            # 效喬波動: 0.03-0.1 (3%-10%)
+            # 極高波動: 0.1+ (10%+)
             
-            if expansion_strength > 1.5:
+            # 掩展倍數 = 預測波動 / 重室波動標准
+            baseline_vol = 0.02  # 2% - 重室的基準波動
+            expansion_ratio = predicted_vol / baseline_vol if baseline_vol > 0 else 1.0
+            
+            # 掩展強度: 有多少超過基準 (1.0 = 很正常)
+            expansion_strength = max(0, expansion_ratio - 1.0)
+            will_expand = expansion_ratio > 1.2
+            
+            if expansion_ratio > 2.0:
                 vol_level = 'very_high'
-            elif expansion_strength > 1.0:
+            elif expansion_ratio > 1.5:
                 vol_level = 'high'
-            elif expansion_strength > 0.5:
+            elif expansion_ratio > 1.0:
                 vol_level = 'moderate'
             else:
                 vol_level = 'low'
             
-            logger.info(f'[波動性] {symbol} {timeframe}: {predicted_vol:.2f}x ({vol_level})')
+            logger.debug(f'[波動性] {symbol} {timeframe}: 預測={predicted_vol:.4f}, 掩展倍數={expansion_ratio:.2f}x, 強度={expansion_strength:.2f}')
             
             return {
                 'predicted_vol': predicted_vol,
+                'expansion_ratio': expansion_ratio,
                 'will_expand': will_expand,
                 'expansion_strength': min(1.0, expansion_strength),
                 'volatility_level': vol_level
