@@ -1,5 +1,5 @@
 from flask import Flask, render_template, send_from_directory
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, rooms
 from flask_cors import CORS
 import threading
 import time
@@ -29,6 +29,7 @@ bb_detector_v2 = RealtimeBBDetectorV2(
 scan_active = True
 last_signals = {}  # symbol -> last signal
 symbol_states = {}  # symbol -> state (for UI list)
+user_selected_symbols = {}  # sid -> set of selected symbols
 
 
 def fetch_latest_candles(symbols, timeframe="15m"):
@@ -103,22 +104,23 @@ def realtime_scan_loop():
                 last_signals[symbol] = signal
                 
                 # 廣播信號給所有連接的客戶端
+                # 注意: 在背景執行緒中需要使用應用上下文
                 socketio.emit(
                     "realtime_signal",
                     signal,
-                    broadcast=True
+                    to=None  # to=None 表示廣播給所有客戶端
                 )
                 
                 print(f"[signal] {symbol} {signal['side']} @ {signal['validity_prob']:.2%}")
             
-            # 5. 更新所有幣種狀態 (用於左側幣種列表)
+            # 5. 更新所有幣種狀態
             symbol_states = bb_detector_v2.get_all_symbols_state()
             
             # 廣播所有幣種狀態更新給前端
             socketio.emit(
                 "symbols_state_update",
                 symbol_states,
-                broadcast=True
+                to=None
             )
             
             time.sleep(5.0)  # 每 5 秒掃描一次
@@ -175,7 +177,12 @@ def api_symbol_state(symbol):
 
 @socketio.on("connect")
 def handle_connect():
-    print(f"[socket] Client connected")
+    from flask import request
+    sid = request.sid
+    print(f"[socket] Client connected: {sid}")
+    
+    # 初始化該用戶的選中幣種集合
+    user_selected_symbols[sid] = set()
     
     # 連接時推送所有幣種列表
     emit("connection_response", {
@@ -187,7 +194,13 @@ def handle_connect():
 
 @socketio.on("disconnect")
 def handle_disconnect():
-    print(f"[socket] Client disconnected")
+    from flask import request
+    sid = request.sid
+    print(f"[socket] Client disconnected: {sid}")
+    
+    # 清理該用戶的選中幣種
+    if sid in user_selected_symbols:
+        del user_selected_symbols[sid]
 
 
 @socketio.on("request_symbol_list")
@@ -201,6 +214,43 @@ def handle_request_symbol_list():
         "symbols": bb_detector_v2.symbols,
         "states": all_states,
         "count": len(bb_detector_v2.symbols)
+    })
+
+
+@socketio.on("select_symbol")
+def handle_select_symbol(data):
+    """
+    前端選擇/取消選擇幣種
+    
+    前端發送:
+    {
+        "symbol": "BTCUSDT",
+        "selected": true/false
+    }
+    """
+    from flask import request
+    sid = request.sid
+    symbol = data.get("symbol")
+    selected = data.get("selected", False)
+    
+    if symbol not in bb_detector_v2.symbols:
+        emit("error", {"message": f"Unknown symbol: {symbol}"})
+        return
+    
+    if selected:
+        # 添加到選中集合
+        user_selected_symbols[sid].add(symbol)
+        print(f"[select_symbol] {sid} selected {symbol}")
+    else:
+        # 從選中集合移除
+        user_selected_symbols[sid].discard(symbol)
+        print(f"[select_symbol] {sid} deselected {symbol}")
+    
+    # 回傳確認
+    emit("selection_updated", {
+        "symbol": symbol,
+        "selected": selected,
+        "selected_symbols": list(user_selected_symbols[sid])
     })
 
 
@@ -219,11 +269,11 @@ def handle_force_refresh(data):
         # 推送所有信號
         for signal in signals:
             last_signals[signal["symbol"]] = signal
-            socketio.emit("realtime_signal", signal, broadcast=True)
+            socketio.emit("realtime_signal", signal, to=None)
         
         # 推送所有幣種狀態
         all_states = bb_detector_v2.get_all_symbols_state()
-        socketio.emit("symbols_state_update", all_states, broadcast=True)
+        socketio.emit("symbols_state_update", all_states, to=None)
         
         print(f"[force_refresh] Found {len(signals)} signals")
         
@@ -236,6 +286,8 @@ def handle_force_refresh(data):
     
     except Exception as e:
         print(f"[force_refresh] Error: {e}")
+        import traceback
+        traceback.print_exc()
         emit("force_refresh_response", {
             "status": "error",
             "error": str(e)
