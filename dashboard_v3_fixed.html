@@ -659,7 +659,7 @@
                         </div>
                         <div class="metric">
                             <span class="metric-label">交易信號</span>
-                            <span id="summarySignal" style="display: flex; align-items: center;"></span>
+                            <span id="summarySignal" style="display: flex; align-items: center; gap: 8px;">-</span>
                         </div>
                         <div class="metric">
                             <span class="metric-label">信心度</span>
@@ -755,7 +755,7 @@
     </div>
 
     <div class="container footer">
-        <p>BB反彈ML系統 V3.0 升級版 - 實時監控面板 - 構建於 Flask 成 機器學習 | 已修復 null 錯誤</p>
+        <p>BB反彈ML系統 V3.0 升級版 - 實時監控面板 | 已修復波動性模型 + DOM 元素檢查</p>
     </div>
 
     <script>
@@ -912,109 +912,132 @@
         }
 
         function displayResults(data) {
-            const summarySymbol = document.getElementById('summarySymbol');
-            const summaryTimeframe = document.getElementById('summaryTimeframe');
-            const summarySignal = document.getElementById('summarySignal');
-            const confidenceBar = document.getElementById('confidenceBar');
-            const confidenceValue = document.getElementById('confidenceValue');
-            const summaryTime = document.getElementById('summaryTime');
-            
-            if (!summarySymbol || !summaryTimeframe || !summarySignal || !confidenceBar || !confidenceValue || !summaryTime) {
-                console.error('DOM 元素未找到');
-                return;
-            }
-            
-            summarySymbol.textContent = data.symbol || '-';
-            summaryTimeframe.textContent = data.timeframe || '-';
-            
-            signalElement = document.getElementById('summarySignal');
-            if (signalElement && data.signal) {
-                signalElement.innerHTML = `
-                    <span class="signal-indicator ${getSignalClass(data.signal)}"></span>
-                    <span class="signal-badge ${getSignalClass(data.signal)}">${data.signal}</span>
-                `;
-            }
+            try {
+                // 檢查所有關鍵 DOM 元素
+                const requiredElements = {
+                    summarySymbol: 'summarySymbol',
+                    summaryTimeframe: 'summaryTimeframe',
+                    summarySignal: 'summarySignal',
+                    confidenceBar: 'confidenceBar',
+                    confidenceValue: 'confidenceValue',
+                    summaryTime: 'summaryTime'
+                };
+                
+                const missingElements = [];
+                for (const [key, id] of Object.entries(requiredElements)) {
+                    if (!document.getElementById(id)) {
+                        missingElements.push(id);
+                    }
+                }
+                
+                if (missingElements.length > 0) {
+                    console.error('缺失的 DOM 元素:', missingElements);
+                    showAlert('介面載入失敗，請刷新頁面', 'error');
+                    return;
+                }
+                
+                // 安全的 DOM 更新
+                const summarySymbol = document.getElementById('summarySymbol');
+                const summaryTimeframe = document.getElementById('summaryTimeframe');
+                const summarySignal = document.getElementById('summarySignal');
+                const confidenceBar = document.getElementById('confidenceBar');
+                const confidenceValue = document.getElementById('confidenceValue');
+                const summaryTime = document.getElementById('summaryTime');
+                
+                if (summarySymbol) summarySymbol.textContent = data.symbol || '-';
+                if (summaryTimeframe) summaryTimeframe.textContent = data.timeframe || '-';
+                
+                if (summarySignal && data.signal) {
+                    const signalClass = getSignalClass(data.signal);
+                    summarySignal.innerHTML = `<span class="signal-indicator ${signalClass}"></span><span class="signal-badge ${signalClass}">${data.signal}</span>`;
+                } else if (summarySignal) {
+                    summarySignal.textContent = '-';
+                }
 
-            const confidence = Math.round((data.confidence || 0) * 100);
-            confidenceBar.style.width = `${confidence}%`;
-            confidenceValue.textContent = `${confidence}%`;
+                const confidence = Math.round((data.confidence || 0) * 100);
+                if (confidenceBar) confidenceBar.style.width = `${confidence}%`;
+                if (confidenceValue) confidenceValue.textContent = `${confidence}%`;
+                if (summaryTime) summaryTime.textContent = new Date(data.timestamp || Date.now()).toLocaleTimeString('zh-TW');
 
-            summaryTime.textContent = new Date(data.timestamp || Date.now()).toLocaleTimeString('zh-TW');
+                // 層級 1: BB
+                const bbTouched = document.getElementById('bbTouched');
+                const bbTouchType = document.getElementById('bbTouchType');
+                const bbConfidence = document.getElementById('bbConfidence');
+                
+                if (data.bb_touch) {
+                    if (bbTouched) bbTouched.textContent = data.bb_touch.touched ? '是' : '否';
+                    if (bbTouchType) bbTouchType.textContent = {'upper': '上軌', 'lower': '下軌', 'none': '無'}[data.bb_touch.touch_type] || '未知';
+                    if (bbConfidence) bbConfidence.textContent = `${Math.round(data.bb_touch.confidence * 100)}%`;
+                }
 
-            const bbTouched = document.getElementById('bbTouched');
-            const bbTouchType = document.getElementById('bbTouchType');
-            const bbConfidence = document.getElementById('bbConfidence');
-            
-            if (data.bb_touch && bbTouched && bbTouchType && bbConfidence) {
-                bbTouched.textContent = data.bb_touch.touched ? '是' : '否';
-                bbTouchType.textContent = {
-                    'upper': '上軌',
-                    'lower': '下軌',
-                    'none': '無'
-                }[data.bb_touch.touch_type] || '未知';
-                bbConfidence.textContent = `${Math.round(data.bb_touch.confidence * 100)}%`;
-            }
+                // 層級 2: Validity
+                const validValid = document.getElementById('validValid');
+                const validProbability = document.getElementById('validProbability');
+                const validQuality = document.getElementById('validQuality');
+                
+                if (data.validity) {
+                    if (validValid) validValid.textContent = data.validity.valid ? '是' : '否';
+                    if (validProbability) validProbability.textContent = `${Math.round(data.validity.probability)}%`;
+                    if (validQuality && data.validity.quality) {
+                        validQuality.innerHTML = `<span class="quality-badge ${data.validity.quality}">${data.validity.quality.toUpperCase()}</span>`;
+                    }
+                }
 
-            const validValid = document.getElementById('validValid');
-            const validProbability = document.getElementById('validProbability');
-            const validQuality = document.getElementById('validQuality');
-            
-            if (data.validity && validValid && validProbability && validQuality) {
-                validValid.textContent = data.validity.valid ? '是' : '否';
-                validProbability.textContent = `${Math.round(data.validity.probability)}%`;
-                validQuality.textContent = data.validity.quality ? 
-                    `<span class="quality-badge ${data.validity.quality}">${data.validity.quality.toUpperCase()}</span>` : '-';
-            }
+                // 層級 3: Volatility
+                const volPredicted = document.getElementById('volPredicted');
+                const volExpand = document.getElementById('volExpand');
+                const volStrength = document.getElementById('volStrength');
+                
+                if (data.volatility) {
+                    if (volPredicted) volPredicted.textContent = data.volatility.predicted_vol.toFixed(3);
+                    if (volExpand) volExpand.textContent = data.volatility.will_expand ? '會' : '不會';
+                    if (volStrength) volStrength.textContent = `${Math.round(data.volatility.expansion_strength * 100)}%`;
+                }
 
-            const volPredicted = document.getElementById('volPredicted');
-            const volExpand = document.getElementById('volExpand');
-            const volStrength = document.getElementById('volStrength');
-            
-            if (data.volatility && volPredicted && volExpand && volStrength) {
-                volPredicted.textContent = data.volatility.predicted_vol.toFixed(3);
-                volExpand.textContent = data.volatility.will_expand ? '會' : '不會';
-                volStrength.textContent = `${Math.round(data.volatility.expansion_strength * 100)}%`;
-            }
+                // 詳細表格
+                const tableBody = document.getElementById('detailsTableBody');
+                if (tableBody) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td>幣種/時框</td>
+                            <td>${data.symbol || '-'} / ${data.timeframe || '-'}</td>
+                            <td>交易對和時間框架</td>
+                        </tr>
+                        <tr>
+                            <td>交易信號</td>
+                            <td><span class="signal-badge ${getSignalClass(data.signal || 'NEUTRAL')}">${data.signal || 'NEUTRAL'}</span></td>
+                            <td>基於三層模型的綜合信號</td>
+                        </tr>
+                        <tr>
+                            <td>BB觸及信心度</td>
+                            <td>${Math.round((data.bb_touch?.confidence || 0) * 100)}%</td>
+                            <td>位置分類器的信心度</td>
+                        </tr>
+                        <tr>
+                            <td>有效性概率</td>
+                            <td>${Math.round((data.validity?.probability || 0))}%</td>
+                            <td>反彈有效性的概率</td>
+                        </tr>
+                        <tr>
+                            <td>波動性預測</td>
+                            <td>${(data.volatility?.predicted_vol || 0).toFixed(3)}</td>
+                            <td>預測的波動性倍數</td>
+                        </tr>
+                        <tr>
+                            <td>整體信心度</td>
+                            <td>${Math.round(data.confidence * 100)}%</td>
+                            <td>三層模型加權平均信心度</td>
+                        </tr>
+                    `;
+                }
 
-            const tableBody = document.getElementById('detailsTableBody');
-            if (tableBody) {
-                tableBody.innerHTML = `
-                    <tr>
-                        <td>幣種/時框</td>
-                        <td>${data.symbol || '-'} / ${data.timeframe || '-'}</td>
-                        <td>交易對和時間框架</td>
-                    </tr>
-                    <tr>
-                        <td>交易信號</td>
-                        <td><span class="signal-badge ${getSignalClass(data.signal || 'NEUTRAL')}">${data.signal || 'NEUTRAL'}</span></td>
-                        <td>基於三層模型的綜合信號</td>
-                    </tr>
-                    <tr>
-                        <td>BB觸及信心度</td>
-                        <td>${Math.round((data.bb_touch?.confidence || 0) * 100)}%</td>
-                        <td>位置分類器的信心度</td>
-                    </tr>
-                    <tr>
-                        <td>有效性概率</td>
-                        <td>${Math.round((data.validity?.probability || 0))}%</td>
-                        <td>反彈有效性的概率</td>
-                    </tr>
-                    <tr>
-                        <td>波動性預測</td>
-                        <td>${(data.volatility?.predicted_vol || 0).toFixed(3)}</td>
-                        <td>預測的波動性倍數</td>
-                    </tr>
-                    <tr>
-                        <td>整體信心度</td>
-                        <td>${Math.round(data.confidence * 100)}%</td>
-                        <td>三層模型加權平均信心度</td>
-                    </tr>
-                `;
-            }
-
-            const resultsContainer = document.getElementById('resultsContainer');
-            if (resultsContainer) {
-                resultsContainer.style.display = 'block';
+                const resultsContainer = document.getElementById('resultsContainer');
+                if (resultsContainer) {
+                    resultsContainer.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('displayResults 發生錯誤:', error);
+                showAlert('結果顯示失敗: ' + error.message, 'error');
             }
         }
 
