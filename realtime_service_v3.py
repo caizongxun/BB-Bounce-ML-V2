@@ -1,11 +1,12 @@
 """
-BB反彈ML系統 - 實時服務 V3 (修載第三輫修載)
+BB反彈ML系統 - 實時服務 V3 (修載第三輬修載)
 支持三層模型整合：BB觸厬檢測 + 有效性判別 + 波動性預測
 修載：
 1. pickle/joblib 序列化不一致問題
 2. BB 模型特徵數量不匹配 (16 -> 12)
 3. 波動性模型特徵數量不匹配 (3 -> 15)
-4. BB 觸厬位置分類阈測適輯 (「觸厬是但位置未知」矛牶)
+4. BB 觸及位置分類預測邏輯 (「觸及是但位置未知」矛盾)
+5. JSON 序列化錯誤 - label_map 鍵型別混合
 """
 
 import os
@@ -57,7 +58,7 @@ TIMEFRAMES = ['15m', '1h']
 # ============================================================
 
 class ModelLoader:
-    """高宮予模型加載器 - 支持 pickle 和 joblib"""
+    """高算騂模型加載器 - 支持 pickle 和 joblib"""
     
     @staticmethod
     def load_model(filepath, model_type='auto'):
@@ -79,7 +80,7 @@ class ModelLoader:
                 except Exception as e1:
                     if model_type == 'joblib':
                         raise
-                    logger.debug(f'joblib 加載失敷，嫂試 pickle')
+                    logger.debug(f'joblib 加載失敗，嘗試 pickle')
             
             if model_type in ['auto', 'pickle']:
                 with open(filepath, 'rb') as f:
@@ -88,17 +89,17 @@ class ModelLoader:
                     return model
         
         except Exception as e:
-            logger.error(f'加載失敷 {filepath}: {str(e)[:200]}')
+            logger.error(f'加載失敗 {filepath}: {str(e)[:200]}')
             return None
 
 # ============================================================
-# BB 特徵提取 (修載版本 - 實現歷史數據)
+# BB 特徵提取 (修載版本 - 實現歷式數據)
 # ============================================================
 
 class RealTimeFeatureExtractor:
     """
     從原始數據提取 BB 模型所需的 12 個特徵
-    實現歷史數據快中機制
+    實現歷式數據快存機制
     """
     
     def __init__(self, history_size=50):
@@ -228,7 +229,7 @@ class RealTimeFeatureExtractor:
         features.append(self._calculate_sma(symbol, timeframe, 20))
         features.append(self._calculate_sma(symbol, timeframe, 50))
         
-        assert len(features) == 12, f'須朁2 個特徵, 但有 {len(features)} 個'
+        assert len(features) == 12, f'須有12 個特徵, 但有 {len(features)} 個'
         
         return np.array(features, dtype=np.float32)
 
@@ -417,7 +418,7 @@ class VolatilityFeatureExtractor:
         features.append(k_percent / 100)
         features.append(d_percent / 100)
         
-        assert len(features) == 15, f'須朁15 個特徵, 但有 {len(features)} 個'
+        assert len(features) == 15, f'須有15 個特徵, 但有 {len(features)} 個'
         
         return np.array(features, dtype=np.float32)
 
@@ -454,7 +455,7 @@ class ModelManager:
                     logger.info(f'已加載: {full_path.name}')
                     return model
             except Exception as e:
-                logger.error(f'加載失敷 {full_path}: {str(e)[:100]}')
+                logger.error(f'加載失敗 {full_path}: {str(e)[:100]}')
         
         return None
     
@@ -530,7 +531,7 @@ class ModelManager:
         logger.info(f'模型加載完成: BB={loaded_count["bb"]}, Validity={loaded_count["validity"]}, Vol={loaded_count["vol"]}')
         
         if loaded_count['bb'] == 0:
-            logger.warning('警告: 沒有找到任何 BB models. 詳誊棄骬 models 資料夾是否正確.')
+            logger.warning('警告: 沒有找到任何 BB models. 請檢查 models 資料夾是否正確.')
     
     def predict_bb_touch(self, symbol, timeframe, ohlcv_data):
         key = (symbol, timeframe)
@@ -548,9 +549,14 @@ class ModelManager:
             probabilities = models['model'].predict_proba(features_scaled)[0]
             confidence = float(np.max(probabilities))
             
+            # 修載：轉換 label_map 以確保所有鍵都是字符串
             label_map = models['label_map'] or {0: 'lower', 1: 'none', 2: 'upper'}
+            
+            # 強制轉換為字符串鍵
+            label_map_str = {str(k): str(v) for k, v in label_map.items()}
+            
             best_class = np.argmax(probabilities)
-            touch_type = label_map.get(best_class, 'unknown')
+            touch_type = label_map_str.get(str(best_class), 'unknown')
             touched = (best_class != 1) and (confidence > 0.3)
             
             if not touched:
@@ -561,10 +567,10 @@ class ModelManager:
                 'touch_type': touch_type,
                 'confidence': float(confidence),
                 'prediction': int(best_class),
-                'probabilities': {label_map.get(i, f'class_{i}'): float(p) for i, p in enumerate(probabilities)}
+                'probabilities': {str(label_map_str.get(str(i), f'class_{i}')): float(p) for i, p in enumerate(probabilities)}
             }
         except Exception as e:
-            logger.error(f'BB觸厬預測失變 {symbol} {timeframe}: {e}')
+            logger.error(f'BB觸及預測失敗 {symbol} {timeframe}: {e}')
             return None
     
     def predict_validity(self, symbol, timeframe, ohlcv_data):
@@ -606,7 +612,7 @@ class ModelManager:
                 'confidence': valid_prob
             }
         except Exception as e:
-            logger.error(f'有效性預測失變 {symbol} {timeframe}: {e}')
+            logger.error(f'有效性預測失敗 {symbol} {timeframe}: {e}')
             return None
     
     def predict_volatility(self, symbol, timeframe, ohlcv_data):
@@ -631,7 +637,7 @@ class ModelManager:
                 'expansion_strength': min(1.0, expansion_strength)
             }
         except Exception as e:
-            logger.error(f'波動性預測失變 {symbol} {timeframe}: {str(e)[:200]}')
+            logger.error(f'波動性預測失敗 {symbol} {timeframe}: {str(e)[:200]}')
             return None
 
 
@@ -780,12 +786,12 @@ if __name__ == '__main__':
         logger.info('  層級3: Volatility Predictor (15 個特徵)')
         logger.info('='*60)
         
-        # 初史斯壣売接壢
-        logger.info('開始鈟骋模型管理器...')
+        # 初始化模型管理器
+        logger.info('開始初始化模型管理器...')
         model_manager = ModelManager()
-        logger.info('模型管理器鈟骋消成')
+        logger.info('模型管理器初始化完成')
         
-        logger.info(f'即將署下 Flask 應用: 0.0.0.0:5000')
+        logger.info(f'即將部署 Flask 應用: 0.0.0.0:5000')
         app.run(
             host='0.0.0.0',
             port=5000,
@@ -794,11 +800,11 @@ if __name__ == '__main__':
             use_reloader=False
         )
     except OSError as e:
-        logger.error(f'[FATAL] 端口錄競: {e}')
+        logger.error(f'[FATAL] 端口競爭: {e}')
         logger.error(f'\n修載方案: 更換端口')
         logger.error(f'app.run(..., port=8000, ...)')
         raise
     except Exception as e:
-        logger.error(f'[FATAL] 含秘錯誤: {e}', exc_info=True)
+        logger.error(f'[FATAL] 含密錯誤: {e}', exc_info=True)
         traceback.print_exc()
         raise
