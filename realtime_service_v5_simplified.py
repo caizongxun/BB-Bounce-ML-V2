@@ -7,6 +7,7 @@ BB反彈ML系統 - 實時服務 V5 (簡化版)
 改進：使用上一根完全形成的K棒做預測，避免預測閃爍
 
 預測穩定性修複：不僅BB計算用上一根K棒，有效性/波動性也用上一根K棒
+特椅提取也避免隨機填充，用常數代替，確保重複預測一致
 """
 
 import numpy as np
@@ -345,7 +346,7 @@ class ValidityChecker:
                     logger.debug(f'已加載有效性模型: {symbol} {timeframe}')
     
     def extract_features_padded(self, ohlcv, target_size=17):
-        """粗付特椅提取 - 填充不足的特椅數"""
+        """粗付特椅提取 - 沒有實確數據的特椅用常數 0 代替，不用隨機填充"""
         o = ohlcv.get('open', 0)
         h = ohlcv.get('high', 0)
         l = ohlcv.get('low', 0)
@@ -361,9 +362,9 @@ class ValidityChecker:
             v if v > 0 else 1                # 4: 成交量
         ]
         
-        # 填充元余特椅
+        # 填充元余特椅 - 使用 0 代替，不用隨機
         while len(features) < target_size:
-            features.append(np.random.randn() * 0.1)
+            features.append(0.0)  # ✅ 用 0 代替，確保重複預測一致
         
         return np.array(features[:target_size], dtype=np.float32)
     
@@ -380,6 +381,9 @@ class ValidityChecker:
             features_scaled = models['scaler'].transform([features])
             proba = models['model'].predict_proba(features_scaled)[0]
             valid_prob = float(proba[1]) if len(proba) > 1 else 0.5
+            
+            logger.info(f'[模型輸入] {symbol} {timeframe}: features={features[:5]} (shape={features.shape})')
+            logger.info(f'[模型輸出] {symbol} {timeframe}: 有效性概率={valid_prob*100:.1f}%')
             
             if valid_prob >= 0.75:
                 quality = 'excellent'
@@ -421,7 +425,7 @@ class VolatilityPredictor:
                     logger.debug(f'已加載波動性模型: {symbol} {timeframe}')
     
     def extract_features_padded(self, ohlcv, target_size=15):
-        """粗付特椅提取 - 填充不足的特椅數"""
+        """粗付特椅提取 - 沒有實確數據的特椅用常數 0 代替，不用隨機填充"""
         o = ohlcv.get('open', 0)
         h = ohlcv.get('high', 0)
         l = ohlcv.get('low', 0)
@@ -437,9 +441,9 @@ class VolatilityPredictor:
             abs(h - c) / c if c > 0 else 0   # 4: 上影
         ]
         
-        # 填充元余特椅
+        # 填充元余特椅 - 使用 0 代替，不用隨機
         while len(features) < target_size:
-            features.append(np.random.randn() * 0.1)
+            features.append(0.0)  # ✅ 用 0 代替，確保重複預測一致
         
         return np.array(features[:target_size], dtype=np.float32)
     
@@ -582,6 +586,7 @@ if __name__ == '__main__':
         logger.info('     - SMOOTHED: 平衡策略')
         logger.info('  4. 檢測接近/接觸：統一用預測K棒')
         logger.info('  5. 只有接近/接觸時才調用模型：統一用預測K棒')
+        logger.info('  6. 模型特椅提取不用隨機，用常數 0 代替，確保重複預測一致')
         logger.info('=' * 60)
         
         logger.info(f'部署地址: 0.0.0.0:5000')
