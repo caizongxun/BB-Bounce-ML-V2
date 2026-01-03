@@ -1,7 +1,9 @@
 """
 BB反彈ML系統 - 實時服務 V3
 支持三層模型整合：BB觸及檢測 -> 有效性判別 -> 波動性預測
-修正：pickle/joblib 序列化不一致問題
+修警：
+1. pickle/joblib 序列化不一致問題
+2. BB 模型特徵數量不匹配
 """
 
 import os
@@ -48,7 +50,7 @@ SYMBOLS = [
 TIMEFRAMES = ['15m', '1h']
 
 # ============================================================
-# 修正: 安全的模型加載器
+# 修武：安全的模型加載器
 # ============================================================
 
 class ModelLoader:
@@ -58,10 +60,6 @@ class ModelLoader:
     def load_model(filepath, model_type='auto'):
         """
         加載檔案 (joblib 或 pickle)
-        
-        參數：
-        - filepath: 檔案路徑
-        - model_type: 'auto'(自動偵渫), 'joblib', 'pickle'
         """
         filepath = Path(filepath)
         
@@ -70,7 +68,6 @@ class ModelLoader:
             return None
         
         try:
-            # 第一次：优先使用 joblib (訓練脚本使用)
             if model_type in ['auto', 'joblib']:
                 try:
                     model = joblib.load(filepath)
@@ -79,9 +76,8 @@ class ModelLoader:
                 except Exception as e1:
                     if model_type == 'joblib':
                         raise
-                    logger.debug(f'joblib 加載失救：{e1}，新試 pickle')
+                    logger.debug(f'joblib 加載失救，新試 pickle')
             
-            # 第二次：使用 pickle (encoding='latin1')
             if model_type in ['auto', 'pickle']:
                 with open(filepath, 'rb') as f:
                     model = pickle.load(f, encoding='latin1')
@@ -91,6 +87,195 @@ class ModelLoader:
         except Exception as e:
             logger.error(f'加載失救 {filepath}: {str(e)[:200]}')
             return None
+
+# ============================================================
+# BB 特徵提取 (修警版本 - 実現歷式數據)
+# ============================================================
+
+class RealTimeFeatureExtractor:
+    """
+    從原始數據提取 BB 模型所需的 12 個特徵
+    実現歷式數據快存機制
+    """
+    
+    def __init__(self, history_size=50):
+        """
+        參數：
+        - history_size: 保留的歷史 K 線數量 (最低 50)
+        """
+        self.history_size = max(history_size, 50)
+        # {(symbol, timeframe): deque([{open, high, low, close, volume}, ...])}
+        self.history = {}
+        
+        # BB 參數
+        self.bb_period = 20
+        self.bb_std = 2
+        
+        # RSI 參數
+        self.rsi_period = 14
+    
+    def update_history(self, symbol, timeframe, ohlcv_data):
+        """更新歷式數據快存"""
+        key = (symbol, timeframe)
+        
+        if key not in self.history:
+            self.history[key] = deque(maxlen=self.history_size)
+        
+        self.history[key].append(ohlcv_data)
+    
+    def _get_close_prices(self, symbol, timeframe):
+        """取得角位件的所有收盤價"""
+        key = (symbol, timeframe)
+        if key not in self.history or len(self.history[key]) == 0:
+            return None
+        
+        return np.array([d.get('close', 0) for d in list(self.history[key])])
+    
+    def _calculate_bb(self, symbol, timeframe):
+        """計算 Bollinger Bands"""
+        closes = self._get_close_prices(symbol, timeframe)
+        if closes is None or len(closes) < self.bb_period:
+            return None, None, None, None  # (upper, middle, lower, width)
+        
+        sma = np.mean(closes[-self.bb_period:])
+        std = np.std(closes[-self.bb_period:])
+        upper = sma + self.bb_std * std
+        lower = sma - self.bb_std * std
+        width = (upper - lower) / sma if sma != 0 else 0
+        
+        return upper, sma, lower, width
+    
+    def _calculate_rsi(self, symbol, timeframe):
+        """計算 RSI"""
+        closes = self._get_close_prices(symbol, timeframe)
+        if closes is None or len(closes) < self.rsi_period + 1:
+            return 50  # 預設中性 RSI
+        
+        deltas = np.diff(closes[-self.rsi_period-1:])
+        gains = np.where(deltas > 0, deltas, 0)
+        losses = np.where(deltas < 0, -deltas, 0)
+        
+        avg_gain = np.mean(gains)
+        avg_loss = np.mean(losses)
+        
+        if avg_loss == 0:
+            rsi = 100 if avg_gain > 0 else 50
+        else:
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+        
+        return max(0, min(100, rsi))
+    
+    def _calculate_volatility(self, symbol, timeframe):
+        """計算波動性"""
+        closes = self._get_close_prices(symbol, timeframe)
+        if closes is None or len(closes) < 2:
+            return 0
+        
+        returns = np.diff(closes) / closes[:-1]
+        volatility = np.std(returns)
+        return volatility
+    
+    def _calculate_sma(self, symbol, timeframe, period):
+        """計算 SMA"""
+        closes = self._get_close_prices(symbol, timeframe)
+        if closes is None or len(closes) < period:
+            return 0
+        
+        return np.mean(closes[-period:])
+    
+    def extract_features(self, symbol, timeframe, ohlcv_data):
+        """
+        提取 12 個特徵 (識抄訓練時使用)
+        
+        特徵順序 (12 個):
+        1. price_to_bb_middle
+        2. dist_upper_norm
+        3. dist_lower_norm
+        4. bb_width
+        5. rsi
+        6. volatility
+        7. returns_std (20 根 SMA 收盤率的標準差)
+        8. high_low_ratio
+        9. close_open_ratio
+        10. sma_5
+        11. sma_20
+        12. sma_50
+        """
+        
+        # 更新歷式數據
+        self.update_history(symbol, timeframe, ohlcv_data)
+        
+        # 取得當前資料
+        o = ohlcv_data.get('open', 0)
+        h = ohlcv_data.get('high', 0)
+        l = ohlcv_data.get('low', 0)
+        c = ohlcv_data.get('close', 0)
+        v = ohlcv_data.get('volume', 0)
+        
+        features = []
+        
+        # 1-4. BB 特徵
+        bb_upper, bb_middle, bb_lower, bb_width = self._calculate_bb(symbol, timeframe)
+        
+        if bb_middle is not None and bb_middle != 0:
+            # 1. price_to_bb_middle
+            price_to_bb_middle = (c - bb_middle) / bb_middle
+            features.append(price_to_bb_middle)
+            
+            # 2. dist_upper_norm
+            bb_range = bb_upper - bb_lower
+            dist_upper_norm = (bb_upper - c) / bb_range if bb_range != 0 else 0
+            features.append(dist_upper_norm)
+            
+            # 3. dist_lower_norm
+            dist_lower_norm = (c - bb_lower) / bb_range if bb_range != 0 else 0
+            features.append(dist_lower_norm)
+            
+            # 4. bb_width
+            features.append(bb_width)
+        else:
+            features.extend([0, 0, 0, 0])
+        
+        # 5. rsi
+        rsi = self._calculate_rsi(symbol, timeframe)
+        features.append(rsi / 100)  # 正規化到 0-1
+        
+        # 6. volatility
+        volatility = self._calculate_volatility(symbol, timeframe)
+        features.append(volatility)
+        
+        # 7. returns_std (回報率的標準差, 20 根)
+        closes = self._get_close_prices(symbol, timeframe)
+        if closes is not None and len(closes) >= 20:
+            returns = np.diff(closes[-20:]) / closes[-21:-1]
+            returns_std = np.std(returns)
+        else:
+            returns_std = 0
+        features.append(returns_std)
+        
+        # 8. high_low_ratio
+        high_low_ratio = (h / l - 1) if l != 0 else 0
+        features.append(high_low_ratio)
+        
+        # 9. close_open_ratio
+        close_open_ratio = (c / o - 1) if o != 0 else 0
+        features.append(close_open_ratio)
+        
+        # 10-12. SMA
+        sma_5 = self._calculate_sma(symbol, timeframe, 5)
+        features.append(sma_5)
+        
+        sma_20 = self._calculate_sma(symbol, timeframe, 20)
+        features.append(sma_20)
+        
+        sma_50 = self._calculate_sma(symbol, timeframe, 50)
+        features.append(sma_50)
+        
+        # 確保正好 12 個特徵
+        assert len(features) == 12, f'須有 12 個特徵, 但有 {len(features)} 個'
+        
+        return np.array(features, dtype=np.float32)
 
 # ============================================================
 # 模型管理器
@@ -104,6 +289,7 @@ class ModelManager:
         self.validity_models = {}  # Validity Detector
         self.vol_models = {}  # Volatility Predictor
         self.model_cache = {}  # 緩存
+        self.feature_extractor = RealTimeFeatureExtractor()  # 新增
         self.load_all_models()
     
     def _get_model_path(self, model_type, symbol, timeframe):
@@ -121,7 +307,6 @@ class ModelManager:
         
         if full_path.exists():
             try:
-                # 使用安全加載器
                 model = ModelLoader.load_model(full_path, model_type)
                 
                 if model is not None:
@@ -173,7 +358,6 @@ class ModelManager:
                 validity_path = self._get_model_path('validity_models', symbol, timeframe)
                 if validity_path.exists():
                     try:
-                        # validity_models 使用 joblib 上帵 pickle
                         validity_model = self._load_model_file(validity_path, 'validity_model.pkl', 'auto')
                         validity_scaler = self._load_model_file(validity_path, 'scaler.pkl', 'auto')
                         feature_names = self._load_model_file(validity_path, 'feature_names.pkl', 'auto')
@@ -215,7 +399,7 @@ class ModelManager:
         logger.info(f'  Validity: {loaded_count["validity"]}標 (失敐: {failed_count["validity"]}標)')
         logger.info(f'  Vol: {loaded_count["vol"]}標 (失敐: {failed_count["vol"]}標)')
     
-    def predict_bb_touch(self, symbol, timeframe, features):
+    def predict_bb_touch(self, symbol, timeframe, ohlcv_data):
         """
         層級1：預測是否觸碰到軌道
         返回: {'touched': bool, 'touch_type': 'upper'|'lower'|'none', 'confidence': float}
@@ -229,10 +413,16 @@ class ModelManager:
             return None
         
         try:
+            # 提取特徵
+            features = self.feature_extractor.extract_features(symbol, timeframe, ohlcv_data)
+            
+            # 標準化
             features_scaled = models['scaler'].transform([features])
+            
+            # 預測
             prediction = models['model'].predict(features_scaled)[0]
             confidence = max(models['model'].predict_proba(features_scaled)[0])
-            label_map = models['label_map'] or {0: 'none', 1: 'upper', 2: 'lower'}
+            label_map = models['label_map'] or {0: 'lower', 1: 'none', 2: 'upper'}
             touch_type = label_map.get(prediction, 'none')
             touched = touch_type != 'none'
             
@@ -246,7 +436,7 @@ class ModelManager:
             logger.error(f'BB觸厬預測失敐 {symbol} {timeframe}: {e}')
             return None
     
-    def predict_validity(self, symbol, timeframe, features):
+    def predict_validity(self, symbol, timeframe, ohlcv_data):
         """
         層級2：預測反彈有效性
         返回: {'valid': bool, 'probability': float, 'quality': 'excellent'|'good'|'moderate'|'weak'|'poor'}
@@ -260,7 +450,21 @@ class ModelManager:
             return None
         
         try:
-            features_scaled = models['scaler'].transform([features])
+            # 特徵提取 (使用 validity_features.py 的方法)
+            from validity_features import ValidityFeatures
+            extractor = ValidityFeatures(lookahead=10)
+            
+            # 需要將 ohlcv_data 轉換为 dataframe
+            df = pd.DataFrame([ohlcv_data])
+            df = extractor.extract_all_features(df)
+            
+            feature_names = models['feature_names'] or extractor.get_feature_names()
+            X = df[feature_names].values
+            
+            # 標準化
+            features_scaled = models['scaler'].transform(X)
+            
+            # 預測機率
             proba = models['model'].predict_proba(features_scaled)[0]
             valid_prob = float(proba[1]) if len(proba) > 1 else 0.5
             
@@ -287,7 +491,7 @@ class ModelManager:
             logger.error(f'有效性預測失敐 {symbol} {timeframe}: {e}')
             return None
     
-    def predict_volatility(self, symbol, timeframe, features):
+    def predict_volatility(self, symbol, timeframe, ohlcv_data):
         """
         層級3：預測波動性
         返回: {'predicted_vol': float, 'will_expand': bool, 'expansion_strength': float}
@@ -301,7 +505,23 @@ class ModelManager:
             return None
         
         try:
+            # 需要按照 train_vol_model.py 的標準提取特徵
+            # 戲下為簡化識別
+            from collections import Counter
+            
+            # 特徵提取 (簡化簡)
+            o = ohlcv_data.get('open', 0)
+            h = ohlcv_data.get('high', 0)
+            l = ohlcv_data.get('low', 0)
+            c = ohlcv_data.get('close', 0)
+            v = ohlcv_data.get('volume', 0)
+            
+            # 粀堵特徵 (需改進)
+            features = [h/l if l != 0 else 1, c/o if o != 0 else 1, v/1e6]
+            
+            # 標準化測試
             features_scaled = models['scaler'].transform([features])
+            
             predicted_vol = float(models['model'].predict(features_scaled)[0])
             will_expand = predicted_vol > 1.2
             expansion_strength = max(0, (predicted_vol - 1.0) / 1.0)
@@ -317,50 +537,6 @@ class ModelManager:
 
 
 model_manager = ModelManager()
-
-# ============================================================
-# 特徵提取（簡化版本）
-# ============================================================
-
-class FeatureExtractor:
-    """從原始數據提取特徵"""
-    
-    @staticmethod
-    def extract_features(ohlcv_data):
-        """提取基本特徵"""
-        features = []
-        
-        try:
-            o, h, l, c, v = ohlcv_data.get('open'), ohlcv_data.get('high'), \
-                            ohlcv_data.get('low'), ohlcv_data.get('close'), \
-                            ohlcv_data.get('volume')
-            
-            body_ratio = (c - o) / (h - l + 1e-8)
-            wick_ratio = min(h - max(o, c), min(o, c) - l) / (h - l + 1e-8)
-            high_low_range = (h - l) / c
-            close_position = (c - l) / (h - l + 1e-8)
-            
-            features.extend([body_ratio, wick_ratio, high_low_range, close_position])
-            
-            vol_norm = v / (1e6 + 1e-8)
-            features.append(vol_norm)
-            
-            price_slope = (c - o) / o
-            features.append(price_slope)
-            
-            hour = datetime.now().hour
-            is_high_volume_time = 1 if (hour >= 8 and hour <= 12) or (hour >= 20 and hour <= 23) else 0
-            features.extend([hour, is_high_volume_time])
-            
-            while len(features) < 16:
-                features.append(0.0)
-            
-            return np.array(features[:16], dtype=np.float32)
-        
-        except Exception as e:
-            logger.error(f'特徵提取失敐: {e}')
-            return np.zeros(16, dtype=np.float32)
-
 
 # ============================================================
 # API 端點
@@ -396,9 +572,8 @@ def predict():
         if timeframe not in TIMEFRAMES:
             return jsonify({'error': f'無效的時間框架: {timeframe}'}), 400
         
-        features = FeatureExtractor.extract_features(ohlcv)
-        
-        bb_result = model_manager.predict_bb_touch(symbol, timeframe, features)
+        # 預測 BB 觸碰
+        bb_result = model_manager.predict_bb_touch(symbol, timeframe, ohlcv)
         if not bb_result or not bb_result['touched']:
             return jsonify({
                 'symbol': symbol,
@@ -409,8 +584,13 @@ def predict():
                 'signal': 'NEUTRAL'
             })
         
-        validity_result = model_manager.predict_validity(symbol, timeframe, features)
-        vol_result = model_manager.predict_volatility(symbol, timeframe, features)
+        # 預測有效性
+        validity_result = model_manager.predict_validity(symbol, timeframe, ohlcv)
+        
+        # 預測波動性
+        vol_result = model_manager.predict_volatility(symbol, timeframe, ohlcv)
+        
+        # 生成交易信號
         signal = generate_signal(bb_result, validity_result, vol_result)
         
         return jsonify({
@@ -443,14 +623,12 @@ def predict_batch():
             if symbol not in ohlcv_data:
                 continue
             
-            features = FeatureExtractor.extract_features(ohlcv_data[symbol])
-            
-            bb_result = model_manager.predict_bb_touch(symbol, timeframe, features)
+            bb_result = model_manager.predict_bb_touch(symbol, timeframe, ohlcv_data[symbol])
             if not bb_result or not bb_result['touched']:
                 continue
             
-            validity_result = model_manager.predict_validity(symbol, timeframe, features)
-            vol_result = model_manager.predict_volatility(symbol, timeframe, features)
+            validity_result = model_manager.predict_validity(symbol, timeframe, ohlcv_data[symbol])
+            vol_result = model_manager.predict_volatility(symbol, timeframe, ohlcv_data[symbol])
             signal = generate_signal(bb_result, validity_result, vol_result)
             
             results.append({
@@ -533,7 +711,9 @@ if __name__ == '__main__':
     logger.info('  層級2: Validity Detector (有效性判別)')
     logger.info('  層級3: Volatility Predictor (波動性預測)')
     logger.info('='*60)
-    logger.info('修正: joblib + pickle 序列化錯誤已解決')
+    logger.info('修復:')
+    logger.info('  1. joblib + pickle 序列化錯誤')
+    logger.info('  2. BB 特徵數量不匹配 (16 → 12) - 実現歷式數據快存')
     logger.info('='*60)
     
     app.run(
