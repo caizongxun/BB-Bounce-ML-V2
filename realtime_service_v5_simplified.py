@@ -319,7 +319,7 @@ class CompleteFeatureExtractor:
             # 獲取 100 根K棍數據
             closes, klines_data = BBCalculator.fetch_historical_closes(symbol, timeframe, limit=100)
             if closes is None or len(closes) < 50:
-                logger.warning(f'[7特椅] {symbol}: 數據不足')
+                logger.warning(f'[17特椅] {symbol}: 數據不足')
                 return None
             
             # 提取 OHLCV
@@ -365,7 +365,7 @@ class CompleteFeatureExtractor:
             vol_regime = volatility / (avg_volatility + 1e-8)
             features.append(vol_regime)  # 6: volatility_regime
             
-            bb_width_ratio = indicators['bb_width'] / np.mean([klines_data[i]['high'] - klines_data[i]['low'] for i in range(-20, 0)]) + 1e-8
+            bb_width_ratio = indicators['bb_width'] / (np.mean([klines_data[i]['high'] - klines_data[i]['low'] for i in range(-20, 0)]) + 1e-8)
             features.append(bb_width_ratio)  # 7: bb_width_ratio
             
             momentum_dir = np.sign(np.mean(np.diff(closes[-5:])))
@@ -445,6 +445,7 @@ class ValidityChecker:
         """預測有效性"""
         key = (symbol, timeframe)
         if key not in self.models:
+            logger.warning(f'[有效性] {symbol} {timeframe}: 模型未加載')
             return None
         
         try:
@@ -473,7 +474,7 @@ class ValidityChecker:
                 'quality': quality
             }
         except Exception as e:
-            logger.debug(f'有效性預測: {e}')
+            logger.error(f'[有效性預測失敖] {e}')
             return None
 
 class VolatilityPredictor:
@@ -502,6 +503,7 @@ class VolatilityPredictor:
         """預測波動性"""
         key = (symbol, timeframe)
         if key not in self.models:
+            logger.warning(f'[波動性] {symbol} {timeframe}: 模型未加載')
             return None
         
         try:
@@ -534,7 +536,7 @@ class VolatilityPredictor:
                 'volatility_level': vol_level
             }
         except Exception as e:
-            logger.debug(f'波動性預測: {e}')
+            logger.error(f'[波動性預測失敖] {e}')
             return None
 
 # ============================================================
@@ -561,7 +563,10 @@ def health_check():
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    """預測 K 棍是否接近/接觸 BB 軌道"""
+    """預測 K 棍是否接近/接觸 BB 軌道
+    
+    詳新：什一方声音次數程度有效性波動性預測，不门為股窱根西接近股窱根西
+    """
     try:
         data = request.get_json()
         symbol = data.get('symbol', '').upper()
@@ -577,12 +582,13 @@ def predict():
         # 第一步: 計算 BB
         bb_result = BBCalculator.analyze_bb_status(symbol, timeframe, strategy=CURRENT_STRATEGY)
         
-        # 第二步: 只有接近/接觸時才調用模型
+        # 第二步: 模型預測 (單上詳新: 根據 warning_level 不根據 status)
         validity_result = None
         volatility_result = None
         
-        if bb_result['status'] in ['approaching', 'touched']:
-            logger.info(f'[模型] 觸發模型預測 (狀態={bb_result["status"]})')
+        # ✅ 修正：值詳新 warning_level 抽取模型預測
+        if bb_result['warning_level'] in ['danger', 'warning', 'caution']:
+            logger.info(f'[模型] 觸發模型預測 (警告={bb_result["warning_level"]})')
             
             prediction_kline = bb_result['prediction_kline']
             if prediction_kline:
@@ -590,13 +596,15 @@ def predict():
                 features = CompleteFeatureExtractor.extract_17_features(symbol, timeframe, prediction_kline)
                 
                 if features is not None:
-                    logger.info(f'[特椅] {symbol}: {features[:5]}')
+                    logger.info(f'[特椅提取] {symbol}: 完成')
                     validity_result = validity_checker.predict(symbol, timeframe, features)
                     volatility_result = volatility_predictor.predict(symbol, timeframe, features)
                 else:
-                    logger.warning(f'[警告] 特椅提取失敗')
+                    logger.warning(f'[警告] 特椅提取失敖')
+            else:
+                logger.warning(f'[警告] 估K棍無效')
         
-        logger.info(f'[回應] {symbol} {timeframe} - 狀態={bb_result["status"]}, 距離={bb_result["distance_percent"]:.8f}%\n')
+        logger.info(f'[回應] {symbol} {timeframe} - 狀態={bb_result["status"]}, 警告={bb_result["warning_level"]}, 距離={bb_result["distance_percent"]:.8f}%\n')
         
         return jsonify({
             'symbol': symbol,
@@ -629,7 +637,7 @@ if __name__ == '__main__':
         logger.info('=' * 60)
         logger.info('特椅: 17個完整特椅提取')
         logger.info('BB計算: 使用上一根完整K棍')
-        logger.info('有效性/波動性: 只有接近時計算')
+        logger.info('模型預測: 根據 warning_level (接近或匹警告時)')
         logger.info('=' * 60)
         
         logger.info(f'部署地址: 0.0.0.0:5000')
