@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BB 反彈實時監控系統 V5 + 波動 + 接近提示</title>
+    <title>BB 反彈實時監控系統 V5 挂設版</title>
     <style>
         * {
             margin: 0;
@@ -71,10 +71,6 @@
 
         .status-dot.active {
             background: #4caf50;
-        }
-
-        .status-dot.inactive {
-            background: #f44336;
         }
 
         @keyframes pulse {
@@ -187,6 +183,7 @@
             display: flex;
             gap: 12px;
             flex-wrap: wrap;
+            align-items: flex-end;
         }
 
         .btn {
@@ -268,23 +265,42 @@
             color: #ffc107;
         }
 
-        /* 接近程度段 - 關鍵 */
+        /* 接近程度段 - 關鈕 */
         .approaching-section {
             background: rgba(30, 30, 30, 0.6);
-            border: 2px solid #00bcd4;
+            border: 3px solid #ff6b6b;
             border-radius: 10px;
             padding: 25px;
             margin-top: 30px;
+            box-shadow: 0 0 20px rgba(255, 107, 107, 0.2);
+        }
+
+        .approaching-section.upper {
+            border-color: #f44336;
+            box-shadow: 0 0 20px rgba(244, 67, 54, 0.3);
+        }
+
+        .approaching-section.lower {
+            border-color: #4caf50;
+            box-shadow: 0 0 20px rgba(76, 175, 80, 0.3);
         }
 
         .approaching-title {
-            font-size: 16px;
+            font-size: 18px;
             font-weight: 700;
-            color: #00bcd4;
+            color: #ff6b6b;
             margin-bottom: 20px;
             display: flex;
             align-items: center;
             gap: 10px;
+        }
+
+        .approaching-section.upper .approaching-title {
+            color: #f44336;
+        }
+
+        .approaching-section.lower .approaching-title {
+            color: #4caf50;
         }
 
         .approaching-grid {
@@ -295,9 +311,17 @@
 
         .approaching-item {
             background: rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(0, 188, 212, 0.2);
+            border: 1px solid rgba(255, 107, 107, 0.3);
             border-radius: 8px;
-            padding: 15px;
+            padding: 20px;
+        }
+
+        .approaching-section.upper .approaching-item {
+            border-color: rgba(244, 67, 54, 0.3);
+        }
+
+        .approaching-section.lower .approaching-item {
+            border-color: rgba(76, 175, 80, 0.3);
         }
 
         .approaching-label {
@@ -315,23 +339,21 @@
             margin-bottom: 8px;
         }
 
-        .approaching-direction {
-            font-size: 13px;
-            font-weight: 600;
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 4px;
-            background: rgba(0, 188, 212, 0.1);
-            color: #00bcd4;
-            margin-bottom: 8px;
+        .approaching-section.upper .approaching-value {
+            color: #f44336;
+        }
+
+        .approaching-section.lower .approaching-value {
+            color: #4caf50;
         }
 
         .progress-bar-container {
             background: rgba(0, 188, 212, 0.1);
             border-radius: 4px;
-            height: 24px;
+            height: 32px;
             overflow: hidden;
-            margin-top: 8px;
+            margin-top: 12px;
+            border: 1px solid rgba(0, 188, 212, 0.2);
         }
 
         .progress-bar-fill {
@@ -341,17 +363,180 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 9px;
-            color: #0f0f0f;
+            font-size: 12px;
+            color: #fff;
             font-weight: 700;
         }
 
-        .progress-bar-fill.warning {
-            background: linear-gradient(90deg, #ffc107, #ffb300);
+        .approaching-section.upper .progress-bar-fill {
+            background: linear-gradient(90deg, #f44336, #ef5350);
+        }
+
+        .approaching-section.lower .progress-bar-fill {
+            background: linear-gradient(90deg, #4caf50, #81c784);
         }
 
         .progress-bar-fill.danger {
-            background: linear-gradient(90deg, #f44336, #ef5350);
+            background: linear-gradient(90deg, #ff5252, #ff1744) !important;
+            box-shadow: inset 0 0 10px rgba(255, 23, 68, 0.5);
+        }
+
+        /* 所有幣種網格 */
+        .symbols-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+            padding: 20px 0;
+        }
+
+        .symbol-card {
+            background: rgba(30, 30, 30, 0.8);
+            border: 2px solid rgba(0, 188, 212, 0.2);
+            border-radius: 10px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .symbol-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 188, 212, 0.2);
+            border-color: #00bcd4;
+        }
+
+        .symbol-card.danger {
+            border-color: #f44336;
+            box-shadow: 0 0 15px rgba(244, 67, 54, 0.3);
+        }
+
+        .symbol-card.warning {
+            border-color: #ffc107;
+            box-shadow: 0 0 15px rgba(255, 193, 7, 0.2);
+        }
+
+        .symbol-card.safe {
+            border-color: #4caf50;
+            box-shadow: 0 0 15px rgba(76, 175, 80, 0.2);
+        }
+
+        .symbol-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #e0e0e0;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .symbol-status {
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: rgba(0, 188, 212, 0.1);
+            color: #00bcd4;
+            font-weight: 600;
+        }
+
+        .symbol-card.danger .symbol-status {
+            background: rgba(244, 67, 54, 0.15);
+            color: #ef5350;
+        }
+
+        .symbol-card.warning .symbol-status {
+            background: rgba(255, 193, 7, 0.15);
+            color: #ffb300;
+        }
+
+        .symbol-card.safe .symbol-status {
+            background: rgba(76, 175, 80, 0.15);
+            color: #81c784;
+        }
+
+        .symbol-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .symbol-metric {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .symbol-metric-label {
+            font-size: 9px;
+            color: #80d0d8;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .symbol-metric-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+        }
+
+        .symbol-bb {
+            font-size: 10px;
+            color: #a0a0a0;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(0, 188, 212, 0.1);
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .symbol-bb-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .symbol-bb-label {
+            font-size: 8px;
+            color: #80d0d8;
+            text-transform: uppercase;
+        }
+
+        .symbol-bb-value {
+            font-family: 'Courier New', monospace;
+            color: #e0e0e0;
+            font-size: 11px;
+        }
+
+        .update-timestamp {
+            font-size: 9px;
+            color: #80d0d8;
+            margin-top: 8px;
+            text-align: center;
+        }
+
+        .loading-text {
+            text-align: center;
+            color: #80d0d8;
+            padding: 40px;
+            font-size: 14px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #80d0d8;
+        }
+
+        .empty-state-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #e0e0e0;
         }
 
         /* 逡診控制台 */
@@ -386,198 +571,6 @@
             line-height: 1.4;
             white-space: pre-wrap;
             word-wrap: break-word;
-        }
-
-        .debug-log-entry {
-            margin-bottom: 8px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid rgba(255, 193, 7, 0.1);
-        }
-
-        .debug-log-entry:last-child {
-            border-bottom: none;
-        }
-
-        .debug-log-error {
-            color: #f44336;
-        }
-
-        .debug-log-success {
-            color: #4caf50;
-        }
-
-        .debug-log-warning {
-            color: #ffc107;
-        }
-
-        .debug-log-info {
-            color: #4dd0e1;
-        }
-
-        /* 所有幣種網格 */
-        .symbols-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-            padding: 20px 0;
-        }
-
-        .symbol-card {
-            background: rgba(30, 30, 30, 0.8);
-            border: 1px solid rgba(0, 188, 212, 0.2);
-            border-radius: 12px;
-            padding: 20px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .symbol-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0, 188, 212, 0.2);
-            border-color: #00bcd4;
-        }
-
-        .symbol-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, #00bcd4, #4dd0e1);
-            transition: all 0.3s ease;
-        }
-
-        .symbol-card.touched-lower::before {
-            background: linear-gradient(90deg, #4caf50, #81c784);
-        }
-
-        .symbol-card.touched-upper::before {
-            background: linear-gradient(90deg, #f44336, #ef5350);
-        }
-
-        .symbol-card.approaching::before {
-            background: linear-gradient(90deg, #ffc107, #ffb300);
-        }
-
-        .symbol-name {
-            font-size: 16px;
-            font-weight: 700;
-            color: #e0e0e0;
-            margin-bottom: 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .symbol-status {
-            font-size: 11px;
-            padding: 4px 10px;
-            border-radius: 4px;
-            background: rgba(0, 188, 212, 0.1);
-            color: #00bcd4;
-            font-weight: 600;
-        }
-
-        .symbol-status.touched-lower {
-            background: rgba(76, 175, 80, 0.15);
-            color: #81c784;
-        }
-
-        .symbol-status.touched-upper {
-            background: rgba(244, 67, 54, 0.15);
-            color: #ef5350;
-        }
-
-        .symbol-status.approaching {
-            background: rgba(255, 193, 7, 0.15);
-            color: #ffb300;
-        }
-
-        .symbol-info {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-bottom: 12px;
-        }
-
-        .symbol-metric {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        .symbol-metric-label {
-            font-size: 10px;
-            color: #80d0d8;
-            text-transform: uppercase;
-            font-weight: 700;
-        }
-
-        .symbol-metric-value {
-            font-size: 14px;
-            font-weight: 600;
-            color: #e0e0e0;
-            font-family: 'Courier New', monospace;
-        }
-
-        .symbol-bb {
-            font-size: 11px;
-            color: #a0a0a0;
-            margin-top: 12px;
-            padding-top: 12px;
-            border-top: 1px solid rgba(0, 188, 212, 0.1);
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-        }
-
-        .symbol-bb-item {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-
-        .symbol-bb-label {
-            font-size: 9px;
-            color: #80d0d8;
-            text-transform: uppercase;
-        }
-
-        .symbol-bb-value {
-            font-family: 'Courier New', monospace;
-            color: #e0e0e0;
-            font-size: 12px;
-        }
-
-        .update-timestamp {
-            font-size: 11px;
-            color: #80d0d8;
-            margin-top: 8px;
-            text-align: center;
-        }
-
-        .loading-text {
-            text-align: center;
-            color: #80d0d8;
-            padding: 40px;
-            font-size: 14px;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: #80d0d8;
-        }
-
-        .empty-state-title {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 10px;
-            color: #e0e0e0;
         }
 
         ::-webkit-scrollbar {
@@ -630,7 +623,7 @@
 <body>
     <div class="header">
         <div class="header-content">
-            <div class="logo">📈 BB 反彈實時監控系統 V5 + 波動 + 接近提示</div>
+            <div class="logo">📈 BB 反彈實時監控系統 V5 挂設版</div>
             <div class="status-info">
                 <div class="status-item">
                     <div class="status-dot active"></div>
@@ -691,14 +684,17 @@
                         </select>
                     </div>
 
-                    <div class="button-group" style="align-items: flex-end;">
+                    <div class="button-group">
                         <button class="btn btn-primary" onclick="updateDetailedAnalysis()">🔍 立即分析</button>
                         <button class="btn btn-secondary" onclick="toggleAutoUpdate()">自動更新: <span id="auto-status">開啟</span></button>
                     </div>
                 </div>
 
-                <div class="detail-panel">
-                    <div id="detail-content" class="loading-text">選擇幣種和時間框架後點擊「立即分析」開始</div>
+                <div class="detail-panel" id="detail-content">
+                    <div class="empty-state">
+                        <div class="empty-state-title">ℹ️ 醫一事項</div>
+                        <p>選擇幣種和時間框架後點擊「立即分析」開始</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -718,6 +714,20 @@
         </div>
     </div>
 
+    <!-- 逡診控制台 -->
+    <div style="max-width: 1400px; margin: 30px auto; padding: 0 20px;">
+        <div class="debug-panel">
+            <div class="debug-title">📋 逡診控制台 (Debug Console)</div>
+            <div class="debug-log" id="debug-log">等候活動...</div>
+        </div>
+    </div>
+
+    <!-- 頁脚 -->
+    <div style="text-align: center; padding: 30px; color: #80d0d8; font-size: 12px; border-top: 1px solid rgba(0, 188, 212, 0.2);">
+        <p>👋 BB 反彈實時監控系統 V5 挂設版</p>
+        <p style="margin-top: 8px; opacity: 0.7;">直接 BB 計算 | 三級接近提示 | 無需機器學習模型</p>
+    </div>
+
     <script>
         const API_BASE = 'http://localhost:5000';
         const BINANCE_API = 'https://api.binance.com/api/v3';
@@ -731,11 +741,9 @@
         let autoUpdateEnabled = true;
         let detailInterval = null;
         let allSymbolsInterval = null;
-        let lastDetailSymbol = 'BTCUSDT';
-        let lastDetailTimeframe = '15m';
         let debugLogs = [];
 
-        // 逡診日誌機制
+        // 逡診日誌
         function addDebugLog(message, type = 'info') {
             const timestamp = new Date().toLocaleTimeString('zh-TW', { hour12: false });
             debugLogs.push({ message, type, timestamp });
@@ -770,12 +778,12 @@
                         close: parseFloat(kline[4]),
                         volume: parseFloat(kline[7])
                     };
-                    addDebugLog(`[Binance] ${symbol} ${timeframe}: O=${ohlcv.open.toFixed(2)} H=${ohlcv.high.toFixed(2)} L=${ohlcv.low.toFixed(2)} C=${ohlcv.close.toFixed(2)}`, 'success');
+                    addDebugLog(`[Binance] ${symbol}: O=${ohlcv.open.toFixed(2)} H=${ohlcv.high.toFixed(2)} L=${ohlcv.low.toFixed(2)} C=${ohlcv.close.toFixed(2)}`, 'success');
                     return ohlcv;
                 }
                 return null;
             } catch (error) {
-                addDebugLog(`[Binance] 取得 ${symbol} 數據失效: ${error.message}`, 'error');
+                addDebugLog(`[Binance] ${symbol} 取得失败: ${error.message}`, 'error');
                 return null;
             }
         }
@@ -788,10 +796,10 @@
             document.querySelectorAll('.tab-button')[tabIndex].classList.add('active');
 
             if (tabIndex === 0) {
-                addDebugLog('[分析] 切換到詳細分析Tab', 'info');
+                addDebugLog('[分析] 切換到詳細分析', 'info');
                 startDetailUpdate();
             } else {
-                addDebugLog('[所有] 切換到所有幣種監控Tab', 'info');
+                addDebugLog('[所有] 切換到所有幣種監控', 'info');
                 stopDetailUpdate();
                 updateAllSymbols();
                 startAllSymbolsUpdate();
@@ -801,26 +809,20 @@
         async function updateDetailedAnalysis() {
             const symbol = document.getElementById('symbol-select').value;
             const timeframe = document.getElementById('timeframe-select').value;
-            lastDetailSymbol = symbol;
-            lastDetailTimeframe = timeframe;
-
             const container = document.getElementById('detail-content');
-            addDebugLog(`[分析] 開始分析 ${symbol} ${timeframe}`, 'info');
+
+            addDebugLog(`[分析] 開始 ${symbol} ${timeframe}`, 'info');
+            container.innerHTML = '<div class="loading-text">🔍 正在加載...</div>';
             
             try {
-                if (container.textContent.includes('選擇幣種')) {
-                    container.innerHTML = '<div class="loading-text">🔍 正在加載數據...</div>';
-                }
-                
                 const ohlcv = await fetchOHLCV(symbol, timeframe);
                 if (!ohlcv) {
-                    addDebugLog(`[錯誤] 無法取得 ${symbol} OHLCV 數據`, 'error');
-                    container.innerHTML = `<div class="empty-state"><div class="empty-state-title">❌ 錯誤</div><p>無法从 Binance 取得數據</p></div>`;
+                    addDebugLog(`[錯誤] 無法取得 ${symbol}`, 'error');
+                    container.innerHTML = `<div class="empty-state"><div class="empty-state-title">❌ 錯誤</div></div>`;
                     return;
                 }
 
-                addDebugLog(`[模型] 正在調用 API: ${API_BASE}/predict`, 'info');
-                
+                addDebugLog(`[API] 調用 ${API_BASE}/predict...`, 'info');
                 const response = await fetch(`${API_BASE}/predict`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -831,85 +833,62 @@
                     })
                 });
 
-                if (!response.ok) {
-                    addDebugLog(`[模型] API 返回错誤: ${response.status}`, 'error');
-                    throw new Error(`HTTP ${response.status}`);
-                }
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
                 const data = await response.json();
-                addDebugLog(`[模型] API 返回成功:`, 'success');
-                addDebugLog(`  - Touched: ${data.bb_touch?.touched ? '✅' : '❌'}`, 'info');
-                addDebugLog(`  - Touch Type: ${data.bb_touch?.touch_type || 'none'}`, 'info');
-                addDebugLog(`  - Approaching: ${data.bb_touch?.approach?.approaching ? '✅' : '❌'}`, 'info');
-                addDebugLog(`  - Direction: ${data.bb_touch?.approach?.direction || 'none'}`, 'info');
-                addDebugLog(`  - Distance %: ${data.bb_touch?.approach?.distance_percent?.toFixed(2) || 'N/A'}%`, 'info');
+                addDebugLog(`[API] 返回成功`, 'success');
+                
+                const bb = data.bb_touch;
+                addDebugLog(`[BB] direction=${bb.direction}, distance=${bb.distance_percent.toFixed(3)}%, warning=${bb.warning_level}`, 'info');
                 
                 container.innerHTML = renderDetailPanel(data, symbol, timeframe, ohlcv);
                 updateTimestamp();
             } catch (error) {
-                addDebugLog(`[錯誤] 模型調用失敖: ${error.message}`, 'error');
-                container.innerHTML = `<div class="empty-state"><div class="empty-state-title">❌ 錯誤</div><p>${error.message}</p></div>`;
+                addDebugLog(`[錯誤] ${error.message}`, 'error');
+                container.innerHTML = `<div class="empty-state"><div class="empty-state-title">❌ 錯誤</div></div>`;
             }
         }
 
         function renderDetailPanel(data, symbol, timeframe, ohlcv) {
-            const bb = data.bb_touch || {};
-            const approach = bb.approach || {};
-            const touched = bb.touched || false;
-            const touchType = bb.touch_type || 'none';
-            const confidence = (bb.confidence * 100).toFixed(2);
-            const vol = data.volatility || {};
+            const bb = data.bb_touch;
+            const direction = bb.direction;
+            const distance = bb.distance_percent;
+            const warning = bb.warning_level;
 
-            let statusClass = 'warning';
-            let statusText = '未觸厬';
-            if (touched && touchType === 'lower') {
-                statusClass = 'positive';
-                statusText = '✅ 觸厬下軌';
-            } else if (touched && touchType === 'upper') {
-                statusClass = 'negative';
-                statusText = '❌ 觸厬上軌';
-            }
-
-            let volClass = 'vol-low';
-            let volLevel = vol.volatility_level || 'unknown';
-            if (volLevel === 'very_high') volClass = 'vol-very-high';
-            else if (volLevel === 'high') volClass = 'vol-high';
-            else if (volLevel === 'moderate') volClass = 'vol-moderate';
-
-            // 接近程度部分 - 關鍵
             let approachingHTML = '';
-            if (approach && approach.direction) {
-                const distance = approach.distance_percent || 0;
-                const fillPercent = Math.min(distance / 5 * 100, 100);
-                const barClass = distance < 1 ? 'danger' : distance < 2 ? 'warning' : '';
-                const directionText = approach.direction === 'upper' ? '上軌' : '下軌';
-                const warningText = approach.warning_level === 'danger' ? '🚨 陪危陽!' : approach.warning_level === 'warning' ? '⚠️ 警告' : '⛳ 接近';
+            if (direction) {
+                const sectionClass = direction === 'upper' ? 'upper' : 'lower';
+                const directionText = direction === 'upper' ? '上軌' : '下軌';
+                const directionEmoji = direction === 'upper' ? '⬆️' : '⬇️';
+                
+                let warningText = '';
+                let barClass = '';
+                if (warning === 'danger') {
+                    warningText = '🚨 灾難等級! 非常接近!';
+                    barClass = 'danger';
+                } else if (warning === 'warning') {
+                    warningText = '⚠️ 警告等級 - 接近中';
+                } else if (warning === 'caution') {
+                    warningText = '⛳ 注意 - 輹族訊号出珱';
+                }
+                
+                const fillPercent = Math.min((distance / 2) * 100, 100);
                 
                 approachingHTML = `
-                    <div class="approaching-section">
-                        <div class="approaching-title">📈 接近BB纱線提示</div>
+                    <div class="approaching-section ${sectionClass}">
+                        <div class="approaching-title">${directionEmoji} 接近 BB ${directionText}軌道</div>
                         <div class="approaching-grid">
                             <div class="approaching-item">
-                                <div class="approaching-label">指向</div>
-                                <div class="approaching-direction" style="background: rgba(${approach.direction === 'upper' ? '244, 67, 54' : '76, 175, 80'}, 0.15); color: ${approach.direction === 'upper' ? '#ef5350' : '#81c784'};">
-                                    ${approach.direction === 'upper' ? '⬆️' : '⬇️'} 接近${directionText}
-                                </div>
-                                <div class="approaching-label" style="margin-top: 12px;">警告程度</div>
-                                <div class="approaching-value" style="color: ${approach.warning_level === 'danger' ? '#f44336' : approach.warning_level === 'warning' ? '#ffc107' : '#4caf50'};">
-                                    ${warningText}
-                                </div>
+                                <div class="approaching-label">警告等級</div>
+                                <div class="approaching-value" style="font-size: 16px;">${warningText}</div>
                             </div>
                             <div class="approaching-item">
-                                <div class="approaching-label">距離百分比</div>
+                                <div class="approaching-label">距離 BB 軌 (%)</div>
                                 <div class="approaching-value">${distance.toFixed(3)}%</div>
                                 <div class="progress-bar-container">
                                     <div class="progress-bar-fill ${barClass}" style="width: ${fillPercent}%;">
                                         ${distance.toFixed(2)}%
                                     </div>
-                                </div>
-                                <div class="approaching-label" style="margin-top: 12px;">接近程度評估</div>
-                                <div class="approaching-value" style="font-size: 16px; color: #4dd0e1;">
-                                    ${approach.approaching ? '🚨 強炽' : '🏪 正常'}
                                 </div>
                             </div>
                         </div>
@@ -928,53 +907,21 @@
                         <div class="detail-value">${timeframe}</div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">🎯 触及状敷</div>
-                        <div class="detail-value ${statusClass}">${statusText}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">💯 信心度</div>
-                        <div class="detail-value">${confidence}%</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">💵 當前价格 (Close)</div>
+                        <div class="detail-label">💵 當前价格</div>
                         <div class="detail-value" style="color: #4dd0e1;">${ohlcv.close.toFixed(2)}</div>
                     </div>
-                    ${vol.volatility_level ? `
-                        <div class="detail-item">
-                            <div class="detail-label">🌬️ 波动性粗度</div>
-                            <div class="detail-value" style="color: ${vol.volatility_level === 'very_high' ? '#ff5252' : vol.volatility_level === 'high' ? '#ffc107' : vol.volatility_level === 'moderate' ? '#4dd0e1' : '#4caf50'};">
-                                ${volLevel.toUpperCase()}
-                            </div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">📊 波动性數值</div>
-                            <div class="detail-value">${parseFloat(vol.predicted_vol).toFixed(3)}</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">📏 擴張強度</div>
-                            <div class="detail-value">${(vol.expansion_strength * 100).toFixed(1)}%</div>
-                        </div>
-                    ` : ''}
                     ${bb.bb_upper ? `
                         <div class="detail-item">
-                            <div class="detail-label">🔥 上軌</div>
+                            <div class="detail-label">🔥 BB 上軌</div>
                             <div class="detail-value" style="color: #f44336;">${parseFloat(bb.bb_upper).toFixed(2)}</div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">🎯 中线</div>
+                            <div class="detail-label">🎯 BB 中线</div>
                             <div class="detail-value" style="color: #ffc107;">${parseFloat(bb.bb_middle).toFixed(2)}</div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">❄️ 下軌</div>
+                            <div class="detail-label">❄️ BB 下軌</div>
                             <div class="detail-value" style="color: #4caf50;">${parseFloat(bb.bb_lower).toFixed(2)}</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">📈 當前高點</div>
-                            <div class="detail-value">${parseFloat(bb.current_high || 0).toFixed(2)}</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">📉 當前低點</div>
-                            <div class="detail-value">${parseFloat(bb.current_low || 0).toFixed(2)}</div>
                         </div>
                     ` : ''}
                 </div>
@@ -984,10 +931,12 @@
 
         async function updateAllSymbols() {
             const container = document.getElementById('symbols-container');
-            addDebugLog('[所有] 開始更新所有幣種', 'info');
+            addDebugLog('[所有] 開始更新 22 個幣種', 'info');
             
             try {
                 let html = '';
+                let approaching_count = 0;
+                
                 for (const symbol of SYMBOLS) {
                     const ohlcv = await fetchOHLCV(symbol, '15m');
                     if (!ohlcv) continue;
@@ -1003,118 +952,117 @@
                     });
 
                     const data = await response.json();
-                    html += renderSymbolCard(data, symbol, ohlcv);
+                    const card = renderSymbolCard(data, symbol, ohlcv);
+                    html += card.html;
+                    if (card.approaching) approaching_count++;
                 }
+                
                 container.innerHTML = html || '<div class="empty-state"><div class="empty-state-title">❌ 沒有數据</div></div>';
-                addDebugLog('[所有] 完成更新', 'success');
+                addDebugLog(`[所有] 完成! 找到 ${approaching_count} 個接近磊情。`, 'success');
                 updateTimestamp();
             } catch (error) {
-                addDebugLog(`[所有] 更新失敖: ${error.message}`, 'error');
-                container.innerHTML = `<div class="empty-state"><div class="empty-state-title">❌ 載入失敗</div></div>`;
+                addDebugLog(`[錯誤] ${error.message}`, 'error');
             }
         }
 
         function renderSymbolCard(data, symbol, ohlcv) {
-            const bb = data.bb_touch || {};
-            const approach = bb.approach || {};
-            const touched = bb.touched || false;
-            const touchType = bb.touch_type || 'none';
-            const vol = data.volatility || {};
-            let cardClass = '';
-            let statusClass = '';
+            const bb = data.bb_touch;
+            const direction = bb.direction;
+            const distance = bb.distance_percent;
+            const warning = bb.warning_level;
+            
+            let cardClass = 'symbol-card';
             let statusText = '正常';
-
-            if (touched && touchType === 'lower') {
-                cardClass = 'touched-lower';
-                statusClass = 'touched-lower';
-                statusText = '✅ 下軌';
-            } else if (touched && touchType === 'upper') {
-                cardClass = 'touched-upper';
-                statusClass = 'touched-upper';
-                statusText = '❌ 上軌';
-            } else if (approach.direction) {
-                cardClass = 'approaching';
-                statusClass = 'approaching';
-                const dir = approach.direction === 'upper' ? '上' : '下';
-                statusText = `⛳ 接近${dir}軌`;
+            let isApproaching = false;
+            
+            if (warning === 'danger') {
+                cardClass += ' danger';
+                statusText = '🚨 危險!';
+                isApproaching = true;
+            } else if (warning === 'warning') {
+                cardClass += ' warning';
+                statusText = '⚠️ 警告';
+                isApproaching = true;
+            } else if (warning === 'caution') {
+                cardClass += ' warning';
+                statusText = '⛳ 注意';
+            } else {
+                cardClass += ' safe';
+                statusText = '✅ 安全';
             }
-
-            const now = new Date();
-            const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
-
-            return `
-                <div class="symbol-card ${cardClass}">
+            
+            const now = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+            
+            let html = `
+                <div class="${cardClass}">
                     <div class="symbol-name">
                         <span>${symbol}</span>
-                        <div class="symbol-status ${statusClass}">${statusText}</div>
+                        <div class="symbol-status">${statusText}</div>
                     </div>
                     <div class="symbol-info">
                         <div class="symbol-metric">
-                            <div class="symbol-metric-label">💯 信心度</div>
-                            <div class="symbol-metric-value">${((bb.confidence || 0) * 100).toFixed(1)}%</div>
+                            <div class="symbol-metric-label">距離度</div>
+                            <div class="symbol-metric-value">${distance.toFixed(3)}%</div>
                         </div>
                         <div class="symbol-metric">
-                            <div class="symbol-metric-label">🌬️ 波动性</div>
-                            <div class="symbol-metric-value">${(vol.expansion_strength || 0).toFixed(2)}</div>
+                            <div class="symbol-metric-label">方向</div>
+                            <div class="symbol-metric-value">${direction ? (direction === 'upper' ? '⬆️上' : '⬇️下') : '—'}</div>
                         </div>
                     </div>
-                    ${bb.bb_upper ? `
-                        <div class="symbol-bb">
-                            <div class="symbol-bb-item">
-                                <div class="symbol-bb-label">🔥 上</div>
-                                <div class="symbol-bb-value">${parseFloat(bb.bb_upper).toFixed(0)}</div>
-                            </div>
-                            <div class="symbol-bb-item">
-                                <div class="symbol-bb-label">🎯 中</div>
-                                <div class="symbol-bb-value">${parseFloat(bb.bb_middle).toFixed(0)}</div>
-                            </div>
-                            <div class="symbol-bb-item">
-                                <div class="symbol-bb-label">❄️ 下</div>
-                                <div class="symbol-bb-value">${parseFloat(bb.bb_lower).toFixed(0)}</div>
-                            </div>
-                            <div class="symbol-bb-item">
-                                <div class="symbol-bb-label">💵 現</div>
-                                <div class="symbol-bb-value">${ohlcv.close.toFixed(0)}</div>
-                            </div>
+            `;
+            
+            if (bb.bb_upper) {
+                html += `
+                    <div class="symbol-bb">
+                        <div class="symbol-bb-item">
+                            <div class="symbol-bb-label">上</div>
+                            <div class="symbol-bb-value">${parseFloat(bb.bb_upper).toFixed(0)}</div>
                         </div>
-                    ` : ''}
-                    <div class="update-timestamp">${timeStr}</div>
+                        <div class="symbol-bb-item">
+                            <div class="symbol-bb-label">中</div>
+                            <div class="symbol-bb-value">${parseFloat(bb.bb_middle).toFixed(0)}</div>
+                        </div>
+                        <div class="symbol-bb-item">
+                            <div class="symbol-bb-label">下</div>
+                            <div class="symbol-bb-value">${parseFloat(bb.bb_lower).toFixed(0)}</div>
+                        </div>
+                        <div class="symbol-bb-item">
+                            <div class="symbol-bb-label">現</div>
+                            <div class="symbol-bb-value">${ohlcv.close.toFixed(0)}</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            html += `
+                    <div class="update-timestamp">${now}</div>
                 </div>
             `;
+            
+            return { html: html, approaching: isApproaching };
         }
 
         function updateTimestamp() {
-            const now = new Date();
-            const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
-            document.getElementById('last-update').textContent = `最後更新: ${timeStr}`;
+            const now = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+            document.getElementById('last-update').textContent = `最後更新: ${now}`;
         }
 
         function toggleAutoUpdate() {
             autoUpdateEnabled = !autoUpdateEnabled;
             document.getElementById('auto-status').textContent = autoUpdateEnabled ? '開啟' : '關閉';
-            addDebugLog(`[设定] 自動更新: ${autoUpdateEnabled ? '開啟' : '關閉'}`, 'info');
-            
-            if (autoUpdateEnabled) {
-                startDetailUpdate();
-            } else {
-                stopDetailUpdate();
-            }
+            if (autoUpdateEnabled) startDetailUpdate();
+            else stopDetailUpdate();
         }
 
         function startDetailUpdate() {
             if (detailInterval) clearInterval(detailInterval);
             detailInterval = setInterval(() => {
-                if (autoUpdateEnabled) {
-                    updateDetailedAnalysis();
-                }
+                if (autoUpdateEnabled) updateDetailedAnalysis();
             }, 1000);
         }
 
         function stopDetailUpdate() {
-            if (detailInterval) {
-                clearInterval(detailInterval);
-                detailInterval = null;
-            }
+            if (detailInterval) clearInterval(detailInterval);
         }
 
         function startAllSymbolsUpdate() {
@@ -1126,9 +1074,6 @@
 
         window.addEventListener('load', () => {
             addDebugLog('[起動] 頁面已加載', 'success');
-            addDebugLog(`[配置] API 地址: ${API_BASE}`, 'info');
-            addDebugLog(`[配置] Binance API: ${BINANCE_API}`, 'info');
-            addDebugLog(`[配置] 監控幣種數: ${SYMBOLS.length}`, 'info');
             updateDetailedAnalysis();
             startDetailUpdate();
         });
@@ -1138,19 +1083,5 @@
             if (allSymbolsInterval) clearInterval(allSymbolsInterval);
         });
     </script>
-
-    <!-- 逡診控制台 -->
-    <div style="max-width: 1400px; margin: 30px auto; padding: 0 20px;">
-        <div class="debug-panel">
-            <div class="debug-title">📋 逡診控制台 (Debug Console)</div>
-            <div class="debug-log" id="debug-log"></div>
-        </div>
-    </div>
-
-    <!-- 頁脚 -->
-    <div style="text-align: center; padding: 30px; color: #80d0d8; font-size: 12px; border-top: 1px solid rgba(0, 188, 212, 0.2);">
-        <p>👋 BB 反彈實時監控系統 V5 | 會及模型整合 | 泪Flask API 服務</p>
-        <p style="margin-top: 10px; opacity: 0.7;">🔍 小提示：打開需窗 (F12) 的 Console 標籤以查看譳毫這賈的美說邨計</p>
-    </div>
 </body>
 </html>
