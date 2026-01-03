@@ -1,13 +1,14 @@
 """
-BB反彈ML系統 - 實時服務 V3 (修載第九輫修載)
+BB反彈ML系統 - 實時服務 V3 (修載第十輫修載)
 支持三層模型整合：BB觸厬檢測 + 有效性判別 + 波動性預測
 修載：
 1. pickle/joblib 序列化不一致問題
 2. BB 模型特徵數量不匹配 (16 -> 12)
 3. 波動性模型特徵數量不匹配 (3 -> 15)
-4. BB 觸厬位置分類阈測邏輯 (「觸厬是但位置未知」矛牶)
+4. BB 觸厬位置分類閐測邏輯 (「觸厬是但位置未知」矛盾)
 5. JSON 序列化錯誤 - label_map 鍵型別混合
 6. label_map 映射錯誤 - 數字映射到數字而不是文字
+7. 觸厬檢測邏輯 - 只檢測當下 K 棒，不檢測歷史數據
 """
 
 import os
@@ -233,6 +234,23 @@ class RealTimeFeatureExtractor:
         assert len(features) == 12, f'須有12 個特徵, 但有 {len(features)} 個'
         
         return np.array(features, dtype=np.float32)
+    
+    def get_bb_values(self, symbol, timeframe):
+        """獲取當前 BB 值供觸厬檢測使用"""
+        closes = self._get_close_prices(symbol, timeframe)
+        if closes is None or len(closes) < self.bb_period:
+            return None
+        
+        sma = np.mean(closes[-self.bb_period:])
+        std = np.std(closes[-self.bb_period:])
+        upper = sma + self.bb_std * std
+        lower = sma - self.bb_std * std
+        
+        return {
+            'upper': float(upper),
+            'middle': float(sma),
+            'lower': float(lower)
+        }
 
 # ============================================================
 # 波動性特徵提取 (修載版本 - 15 個特徵)
@@ -430,29 +448,29 @@ class VolatilityFeatureExtractor:
 def normalize_label_map(label_map):
     """
     正常化 label_map：
-    - 将任何整數键轉換為整數
+    - 將任何整數鍵轉換為整數
     - 將任何值致化為字符串
-    - 專條处理諤異的映射（例如 {-1: 0, 0: 1, 1: 2}）
+    - 專條處理誘異的映射（例如 {-1: 0, 0: 1, 1: 2}）
     """
     if not label_map:
         return {0: 'lower', 1: 'none', 2: 'upper'}
     
     try:
-        # 情形入1: {-1: 0, 0: 1, 1: 2} 映射回 {0: 'lower', 1: 'none', 2: 'upper'}
+        # 情形1: {-1: 0, 0: 1, 1: 2} 映射回 {0: 'lower', 1: 'none', 2: 'upper'}
         if label_map == {-1: 0, 0: 1, 1: 2} or label_map == {'-1': '0', '0': '1', '1': '2'}:
             logger.debug('棄骬被 label_map 例子')
             return {0: 'lower', 1: 'none', 2: 'upper'}
         
-        # 情形入2: 棄骬是不符常的集合，停作方案
+        # 情形2: 普遍的標準化
         normalized = {}
         for k, v in label_map.items():
-            # 整數键轉整數
+            # 整數鍵轉整數
             k_int = int(k) if isinstance(k, (int, np.integer)) else int(str(k))
-            # 显示優先当作值：字符串 -> 整数 -> 优予
+            # 顯示優先當作值：字符串 -> 整數 -> 優予
             if isinstance(v, str):
                 v_str = v
             elif isinstance(v, (int, np.integer)):
-                # 判断是否是整数，然后轉換為標籤
+                # 判斷是否是整數，然後轉換為標籤
                 v_map = {0: 'lower', 1: 'none', 2: 'upper'}
                 v_str = v_map.get(int(v), f'class_{v}')
             else:
@@ -500,7 +518,7 @@ class ModelManager:
                     logger.info(f'已加載: {full_path.name}')
                     return model
             except Exception as e:
-                logger.error(f'加載失敷 {full_path}: {str(e)[:100]}')
+                logger.error(f'加載失敗 {full_path}: {str(e)[:100]}')
         
         return None
     
@@ -582,41 +600,59 @@ class ModelManager:
             logger.warning('警告: 沒有找到任何 BB models. 請檢查 models 資料夾是否正確.')
     
     def predict_bb_touch(self, symbol, timeframe, ohlcv_data):
+        """
+        修載版本：直接檢測當下 K 棒是否觸厬 BB
+        而不是用模型鞐測歷史特徵
+        """
         key = (symbol, timeframe)
-        if key not in self.bb_models:
+        
+        # 獲取當前 BB 值
+        bb_values = self.bb_feature_extractor.get_bb_values(symbol, timeframe)
+        if not bb_values:
             return None
         
-        models = self.bb_models[key]
-        if not models['model'] or not models['scaler']:
-            return None
+        current_high = ohlcv_data.get('high', 0)
+        current_low = ohlcv_data.get('low', 0)
+        current_close = ohlcv_data.get('close', 0)
         
-        try:
-            features = self.bb_feature_extractor.extract_features(symbol, timeframe, ohlcv_data)
-            features_scaled = models['scaler'].transform([features])
-            prediction = models['model'].predict(features_scaled)[0]
-            probabilities = models['model'].predict_proba(features_scaled)[0]
-            confidence = float(np.max(probabilities))
-            
-            # 使用正常化的 label_map
-            label_map = models['label_map']
-            
-            best_class = np.argmax(probabilities)
-            touch_type = label_map.get(best_class, 'unknown')
-            touched = (best_class != 1) and (confidence > 0.3)
-            
-            if not touched:
-                touch_type = 'none'
-            
-            return {
-                'touched': touched,
-                'touch_type': touch_type,
-                'confidence': float(confidence),
-                'prediction': int(best_class),
-                'probabilities': {label_map.get(i, f'class_{i}'): float(p) for i, p in enumerate(probabilities)}
-            }
-        except Exception as e:
-            logger.error(f'BB觸厬預測失敗 {symbol} {timeframe}: {e}')
-            return None
+        bb_upper = bb_values['upper']
+        bb_lower = bb_values['lower']
+        bb_middle = bb_values['middle']
+        
+        # 檢測當下 K 棒是否觸厬
+        touched = False
+        touch_type = 'none'
+        confidence = 0.0
+        
+        if current_high >= bb_upper:
+            touched = True
+            touch_type = 'upper'
+            # 信心度基於觸厬程度
+            penetration = (current_high - bb_upper) / (bb_upper - bb_middle + 1e-8)
+            confidence = min(1.0, 0.5 + penetration * 0.5)
+        elif current_low <= bb_lower:
+            touched = True
+            touch_type = 'lower'
+            # 信心度基於觸厬程度
+            penetration = (bb_lower - current_low) / (bb_middle - bb_lower + 1e-8)
+            confidence = min(1.0, 0.5 + penetration * 0.5)
+        else:
+            touched = False
+            touch_type = 'none'
+            confidence = 0.0
+        
+        logger.debug(f'{symbol} {timeframe}: H={current_high:.2f}, L={current_low:.2f}, Upper={bb_upper:.2f}, Lower={bb_lower:.2f} -> Touch={touched} ({touch_type})')
+        
+        return {
+            'touched': touched,
+            'touch_type': touch_type,
+            'confidence': float(confidence),
+            'bb_upper': float(bb_upper),
+            'bb_middle': float(bb_middle),
+            'bb_lower': float(bb_lower),
+            'current_high': float(current_high),
+            'current_low': float(current_low)
+        }
     
     def predict_validity(self, symbol, timeframe, ohlcv_data):
         key = (symbol, timeframe)
@@ -657,7 +693,7 @@ class ModelManager:
                 'confidence': valid_prob
             }
         except Exception as e:
-            logger.error(f'有效性預測失敗 {symbol} {timeframe}: {e}')
+            logger.error(f'有效性鞐測失敗 {symbol} {timeframe}: {e}')
             return None
     
     def predict_volatility(self, symbol, timeframe, ohlcv_data):
@@ -682,7 +718,7 @@ class ModelManager:
                 'expansion_strength': min(1.0, expansion_strength)
             }
         except Exception as e:
-            logger.error(f'波動性預測失敗 {symbol} {timeframe}: {str(e)[:200]}')
+            logger.error(f'波動性鞐測失敗 {symbol} {timeframe}: {str(e)[:200]}')
             return None
 
 
@@ -745,7 +781,7 @@ def predict():
         })
     
     except Exception as e:
-        logger.error(f'預測錯誤: {e}', exc_info=True)
+        logger.error(f'鞐測錯誤: {e}', exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -786,7 +822,7 @@ def predict_batch():
         })
     
     except Exception as e:
-        logger.error(f'批量預測錯誤: {e}', exc_info=True)
+        logger.error(f'批需鞐測錯誤: {e}', exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -823,10 +859,10 @@ def calculate_confidence(bb_result, validity_result, vol_result):
 if __name__ == '__main__':
     try:
         logger.info('='*60)
-        logger.info('BB反彈ML系統 - 實時服務 V3')
+        logger.info('BB反彈ML系統 - 實時服務 V3 (修載版本)')
         logger.info('='*60)
         logger.info('模型架構：')
-        logger.info('  層級1: BB Position Classifier (12 個特徵)')
+        logger.info('  層級1: BB Position Detection (直接檢測當下 K 棒)')
         logger.info('  層級2: Validity Detector (17 個特徵)')
         logger.info('  層級3: Volatility Predictor (15 個特徵)')
         logger.info('='*60)
