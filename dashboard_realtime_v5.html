@@ -236,7 +236,7 @@
             padding: 25px;
             margin-top: 30px;
             box-shadow: 0 0 15px rgba(0, 188, 212, 0.15);
-            transition: border-color 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+            transition: none;
         }
 
         .approaching-section.danger {
@@ -290,7 +290,7 @@
             border: 1px solid rgba(0, 188, 212, 0.2);
             border-radius: 8px;
             padding: 20px;
-            transition: border-color 0.3s ease;
+            transition: none;
         }
 
         .approaching-section.danger .approaching-item {
@@ -363,13 +363,14 @@
             background: linear-gradient(90deg, #4caf50, #81c784);
         }
 
-        /* 模型預測結果 */
+        /* 模型預測結果 - 無動畫 */
         .model-results {
             background: rgba(30, 30, 30, 0.6);
             border: 2px solid #00bcd4;
             border-radius: 10px;
             padding: 20px;
             margin-top: 30px;
+            transition: none;
         }
 
         .model-results.no-data {
@@ -397,6 +398,7 @@
             border: 1px solid rgba(0, 188, 212, 0.2);
             border-radius: 8px;
             padding: 15px;
+            transition: none;
         }
 
         .model-card.validity {
@@ -502,11 +504,13 @@
         .symbol-card.danger {
             border-color: #f44336;
             box-shadow: 0 0 15px rgba(244, 67, 54, 0.3);
+            transition: none;
         }
 
         .symbol-card.warning {
             border-color: #ffc107;
             box-shadow: 0 0 15px rgba(255, 193, 7, 0.2);
+            transition: none;
         }
 
         .symbol-name {
@@ -740,7 +744,7 @@
                             <option value="BTCUSDT">比特幣 (BTCUSDT)</option>
                             <option value="ETHUSDT">以太坊 (ETHUSDT)</option>
                             <option value="BNBUSDT">幣安幣 (BNBUSDT)</option>
-                            <option value="ADAUSDT">卡爾達誾 (ADAUSDT)</option>
+                            <option value="ADAUSDT">卡爾達諾 (ADAUSDT)</option>
                             <option value="XRPUSDT">瑞波 (XRPUSDT)</option>
                             <option value="DOGEUSDT">狗狗幣 (DOGEUSDT)</option>
                             <option value="SOLUSDT">索拉納 (SOLUSDT)</option>
@@ -807,10 +811,10 @@
         </div>
     </div>
 
-    <!-- 頁艵 -->
+    <!-- 頁腳 -->
     <div style="text-align: center; padding: 30px; color: #80d0d8; font-size: 12px; border-top: 1px solid rgba(0, 188, 212, 0.2);">
         <p>BB 反彈實時監控系統 V5 正式版</p>
-        <p style="margin-top: 8px; opacity: 0.7;">布林通道直接計算 | 接近程度實時預警 | 機料学習輔助判斷</p>
+        <p style="margin-top: 8px; opacity: 0.7;">布林通道直接計算 | 接近程度實時預警 | 機料學習輔助判斷</p>
     </div>
 
     <script>
@@ -826,6 +830,7 @@
         let debugLogs = [];
         let detailInterval = null;
         let allSymbolsInterval = null;
+        let symbolCardCache = {}; // 快取卡片 HTML，避免重新渲染造成閃爍
 
         // 診斷日誌
         function addDebugLog(message, type = 'info') {
@@ -923,10 +928,14 @@
                 addDebugLog(`[布林通道] 狀態=${bb.status}, 方向=${bb.direction}, 距離=${bb.distance_percent.toFixed(3)}%`, 'info');
                 
                 if (data.validity) {
-                    addDebugLog(`[有效性] 概率=${(data.validity.probability || 0).toFixed(1)}%, 質量=${data.validity.quality}`, 'info');
+                    addDebugLog(`[有效性] 概率=${(data.validity.probability || 0).toFixed(1)}%, 評級=${data.validity.quality}`, 'success');
+                } else {
+                    addDebugLog(`[有效性] 模型不可用或未觸發`, 'warning');
                 }
                 if (data.volatility) {
-                    addDebugLog(`[波動性] 予測值=${(data.volatility.predicted_vol || 0).toFixed(2)}, 伸張強度=${(data.volatility.expansion_strength || 0).toFixed(2)}`, 'info');
+                    addDebugLog(`[波動性] 預測值=${(data.volatility.predicted_vol || 0).toFixed(2)}, 強度=${(data.volatility.expansion_strength || 0).toFixed(2)}`, 'success');
+                } else {
+                    addDebugLog(`[波動性] 模型不可用或未觸發`, 'warning');
                 }
                 
                 container.innerHTML = renderDetailPanel(data, symbol, timeframe, ohlcv);
@@ -989,7 +998,7 @@
                                     ${distance.toFixed(2)}%
                                 </div>
                             </div>
-                            <div class="approaching-label" style="margin-top: 12px;">風險計稜</div>
+                            <div class="approaching-label" style="margin-top: 12px;">風險計算</div>
                             <div class="approaching-value" style="font-size: 14px;">${distance <= 0.2 ? '危險等級 - 已接近邊界' : warningTextMap[warning]}</div>
                         </div>
                     </div>
@@ -1004,7 +1013,7 @@
 
                 modelHTML = `
                     <div class="model-results">
-                        <div class="model-title">機料学習輔助判斷結果</div>
+                        <div class="model-title">機料學習輔助判斷結果</div>
                         <div class="model-grid">
                 `;
 
@@ -1018,7 +1027,7 @@
                                 <div class="model-metric-value">${(validity.probability || 0).toFixed(1)}%</div>
                             </div>
                             <div class="model-metric">
-                                <div class="model-metric-label">評繼等級</div>
+                                <div class="model-metric-label">評級等級</div>
                                 <div class="quality-badge ${qualityClass}">${validity.quality}</div>
                             </div>
                         </div>
@@ -1040,7 +1049,7 @@
                         <div class="model-card volatility">
                             <div class="model-card-title">未來波動性</div>
                             <div class="model-metric">
-                                <div class="model-metric-label">波動性水准</div>
+                                <div class="model-metric-label">波動性水準</div>
                                 <div class="model-metric-value">${(volatility.predicted_vol || 0).toFixed(2)}x</div>
                             </div>
                             <div class="model-metric">
@@ -1048,7 +1057,7 @@
                                 <div class="model-metric-value">${(volatility.expansion_strength || 0).toFixed(2)}</div>
                             </div>
                             <div class="model-metric">
-                                <div class="model-metric-label">尼佐伏特等級</div>
+                                <div class="model-metric-label">尼采夫特等級</div>
                                 <div style="color: #ff9800; font-size: 12px; text-transform: uppercase; font-weight: 700;">${volatility.volatility_level}</div>
                             </div>
                         </div>
@@ -1072,9 +1081,9 @@
             } else {
                 modelHTML = `
                     <div class="model-results no-data">
-                        <div class="model-title">機料学習輔助判斷結果</div>
+                        <div class="model-title">機料學習輔助判斷結果</div>
                         <div style="padding: 20px; text-align: center; color: #80d0d8;">
-                            詳戈未接近邊界、模型求評变不起
+                            詳盡未接近邊界、模型求評變不起
                         </div>
                     </div>
                 `;
@@ -1116,7 +1125,7 @@
 
         async function updateAllSymbols() {
             const container = document.getElementById('symbols-container');
-            addDebugLog('[實時監控] 開始更新全市場数据', 'info');
+            addDebugLog('[實時監控] 開始更新全市場數據', 'info');
             
             try {
                 let html = '';
@@ -1142,8 +1151,8 @@
                     if (card.critical) critical_count++;
                 }
                 
-                container.innerHTML = html || '<div class="empty-state"><div class="empty-state-title">無數据</div></div>';
-                addDebugLog(`[監控] 更新完成 - 検測到 ${critical_count} 個位置風險`, 'success');
+                container.innerHTML = html || '<div class="empty-state"><div class="empty-state-title">無數據</div></div>';
+                addDebugLog(`[監控] 更新完成 - 檢測到 ${critical_count} 個位置風險`, 'success');
                 updateTimestamp();
             } catch (error) {
                 addDebugLog(`[錯誤] ${error.message}`, 'error');
@@ -1161,7 +1170,7 @@
             let statusText = '正常';
             let isCritical = false;
             
-            // 警警: 0%或钱敬死岋懂惣加起警告等級
+            // 警告: 0% 或距離 <= 0.2% 都發紅色警報
             if (warning === 'danger' || distance <= 0.2) {
                 cardClass += ' danger';
                 statusText = '危險';
@@ -1192,7 +1201,8 @@
                     </div>
             `;
             
-            if (bb.bb_upper) {
+            // 修復: 確保 bb.bb_upper 正確顯示
+            if (bb.bb_upper !== null && bb.bb_upper !== undefined) {
                 html += `
                     <div class="symbol-bb">
                         <div class="symbol-bb-item">
