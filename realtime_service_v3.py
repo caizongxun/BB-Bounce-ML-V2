@@ -23,6 +23,7 @@ from collections import deque
 from threading import Thread
 import time
 import warnings
+import traceback
 
 warnings.filterwarnings('ignore', category=UserWarning)
 
@@ -87,7 +88,7 @@ class ModelLoader:
                     return model
         
         except Exception as e:
-            logger.error(f'加載失敗 {filepath}: {str(e)[:200]}')
+            logger.error(f'加載失敷 {filepath}: {str(e)[:200]}')
             return None
 
 # ============================================================
@@ -459,6 +460,8 @@ class ModelManager:
     
     def load_all_models(self):
         logger.info('開始加載所有模型...')
+        logger.info(f'檔案位置: {MODELS_DIR.absolute()}')
+        logger.info(f'檔案是否存在: {MODELS_DIR.exists()}')
         
         loaded_count = {'bb': 0, 'validity': 0, 'vol': 0}
         failed_count = {'bb': 0, 'validity': 0, 'vol': 0}
@@ -525,6 +528,9 @@ class ModelManager:
                         failed_count['vol'] += 1
         
         logger.info(f'模型加載完成: BB={loaded_count["bb"]}, Validity={loaded_count["validity"]}, Vol={loaded_count["vol"]}')
+        
+        if loaded_count['bb'] == 0:
+            logger.warning('警告: 沒有找到任何 BB models. 詳誊棄骬 models 資料夾是否正確.')
     
     def predict_bb_touch(self, symbol, timeframe, ohlcv_data):
         key = (symbol, timeframe)
@@ -629,7 +635,7 @@ class ModelManager:
             return None
 
 
-model_manager = ModelManager()
+model_manager = None
 
 # ============================================================
 # API 端點
@@ -641,9 +647,9 @@ def health_check():
         'status': 'ok',
         'timestamp': datetime.now().isoformat(),
         'models_loaded': {
-            'bb_models': len(model_manager.bb_models),
-            'validity_models': len(model_manager.validity_models),
-            'vol_models': len(model_manager.vol_models)
+            'bb_models': len(model_manager.bb_models) if model_manager else 0,
+            'validity_models': len(model_manager.validity_models) if model_manager else 0,
+            'vol_models': len(model_manager.vol_models) if model_manager else 0
         }
     })
 
@@ -764,18 +770,35 @@ def calculate_confidence(bb_result, validity_result, vol_result):
 
 
 if __name__ == '__main__':
-    logger.info('='*60)
-    logger.info('BB反彈ML系統 - 實時服務 V3')
-    logger.info('='*60)
-    logger.info('模型架構：')
-    logger.info('  層級1: BB Position Classifier (12 個特徵)')
-    logger.info('  層級2: Validity Detector (17 個特徵)')
-    logger.info('  層級3: Volatility Predictor (15 個特徵)')
-    logger.info('='*60)
-    
-    app.run(
-        host='0.0.0.0',
-        port=5000,
-        debug=False,
-        threaded=True
-    )
+    try:
+        logger.info('='*60)
+        logger.info('BB反彈ML系統 - 實時服務 V3')
+        logger.info('='*60)
+        logger.info('模型架構：')
+        logger.info('  層級1: BB Position Classifier (12 個特徵)')
+        logger.info('  層級2: Validity Detector (17 個特徵)')
+        logger.info('  層級3: Volatility Predictor (15 個特徵)')
+        logger.info('='*60)
+        
+        # 初史斯壣売接壢
+        logger.info('開始鈟骋模型管理器...')
+        model_manager = ModelManager()
+        logger.info('模型管理器鈟骋消成')
+        
+        logger.info(f'即將署下 Flask 應用: 0.0.0.0:5000')
+        app.run(
+            host='0.0.0.0',
+            port=5000,
+            debug=False,
+            threaded=True,
+            use_reloader=False
+        )
+    except OSError as e:
+        logger.error(f'[FATAL] 端口錄競: {e}')
+        logger.error(f'\n修載方案: 更換端口')
+        logger.error(f'app.run(..., port=8000, ...)')
+        raise
+    except Exception as e:
+        logger.error(f'[FATAL] 含秘錯誤: {e}', exc_info=True)
+        traceback.print_exc()
+        raise
