@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 完整訓練管道 - 客觀 BBW 公式版本
 
 流程：
-1. 超參数調優 (2-3 小時)
+1. 超參數調優 (2-3 小時)
 2. 模型訓練 (1 小時)
 3. 全程記錄到 JSON + LOG
 """
@@ -14,6 +15,10 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
 import sys
+import io
+
+# 修複 Windows Unicode 編碼
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 from hyperparameter_tuning_v2_objective import HyperparameterTunerV2_Objective
 from train_bb_band_v2_objective_formula import (
@@ -26,7 +31,7 @@ from train_bb_band_v2_objective_formula import (
 
 
 class TrainingLogger:
-    """整合詳标記錄，記錄超參数調優和訓練結果"""
+    """整合詳标記錄，記錄超參數調優和訓練結果"""
 
     def __init__(self, log_dir="training_logs_v2_objective"):
         self.log_dir = Path(log_dir)
@@ -82,7 +87,7 @@ class TrainingLogger:
         }
 
     def log_tuning_result(self, symbol: str, timeframe: str, params: Dict, score: float):
-        """記錄超參数調優結果"""
+        """記錄超參數調優結果"""
         result = {
             "symbol": symbol,
             "timeframe": timeframe,
@@ -98,7 +103,7 @@ class TrainingLogger:
         self.logger.info(f"[TUNING SUCCESS] {symbol} {timeframe} - Score: {score:.4f}")
 
     def log_tuning_error(self, symbol: str, timeframe: str, error: str):
-        """記錄超參数調優错誤"""
+        """記錄超參數調優错誤"""
         self.results["summary"]["total_tuning_tasks"] += 1
         self.results["summary"]["failed_tuning"] += 1
 
@@ -162,37 +167,37 @@ class TrainingLogger:
         with open(self.json_file, "w", encoding="utf-8") as f:
             json.dump(self.results, f, indent=2, ensure_ascii=False)
 
-        self.logger.info(f"\n📄 詳标記錄已保存: {self.json_file}")
+        self.logger.info(f"\n[SAVED] Training results saved to: {self.json_file}")
 
     def print_summary(self):
         """打印摘要"""
         separator = "=" * 80
         print(f"\n{separator}")
-        print(f"🎆 訓練統計汐記錄")
+        print(f"[SUMMARY] Training Statistics")
         print(f"{separator}")
 
         summary = self.results["summary"]
 
-        print(f"\n💎 超參数調優結果：")
+        print(f"\n[TUNING] Hyperparameter Tuning Results:")
         print(
-            f"  成功: {summary['successful_tuning']}/{summary['total_tuning_tasks']}"
+            f"  Success: {summary['successful_tuning']}/{summary['total_tuning_tasks']}"
         )
         print(
-            f"  失敗: {summary['failed_tuning']}/{summary['total_tuning_tasks']}"
-        )
-
-        print(f"\n📊 模型訓練結果：")
-        print(
-            f"  成功: {summary['successful_training']}/{summary['total_training_tasks']}"
-        )
-        print(
-            f"  失敗: {summary['failed_training']}/{summary['total_training_tasks']}"
+            f"  Failed: {summary['failed_tuning']}/{summary['total_tuning_tasks']}"
         )
 
-        print(f"\n📏 平均性能：")
-        print(f"  平均準確率: {summary['average_accuracy']:.4f} ({summary['average_accuracy']*100:.2f}%)")
-        print(f"  平均精準度: {summary['average_precision']:.4f}")
-        print(f"  平均 F1: {summary['average_f1']:.4f}")
+        print(f"\n[TRAINING] Model Training Results:")
+        print(
+            f"  Success: {summary['successful_training']}/{summary['total_training_tasks']}"
+        )
+        print(
+            f"  Failed: {summary['failed_training']}/{summary['total_training_tasks']}"
+        )
+
+        print(f"\n[METRICS] Average Performance:")
+        print(f"  Average Accuracy: {summary['average_accuracy']:.4f} ({summary['average_accuracy']*100:.2f}%)")
+        print(f"  Average Precision: {summary['average_precision']:.4f}")
+        print(f"  Average F1: {summary['average_f1']:.4f}")
 
         duration = self.results["duration_seconds"]
         hours = int(duration // 3600)
@@ -200,10 +205,10 @@ class TrainingLogger:
         seconds = int(duration % 60)
 
         print(
-            f"\n⏱️  訓練耗時: {hours}h {minutes}m {seconds}s"
+            f"\n[TIME] Total Training Time: {hours}h {minutes}m {seconds}s"
         )
-        print(f"\n📄 LOG 檔: {self.log_file}")
-        print(f"📄 JSON 檔: {self.json_file}")
+        print(f"\n[LOG] Log file: {self.log_file}")
+        print(f"[JSON] Results file: {self.json_file}")
         print(f"{separator}\n")
 
 
@@ -222,16 +227,16 @@ class IntegratedTrainingPipelineV2:
             separator = "=" * 80
             print(f"\n{separator}")
             print(
-                f"🚀 完整訓練管道: 超參数調優 + 模型訓練 (客觀 BBW 公式)"
+                f"[PIPELINE] Complete Training Pipeline: Hyperparameter Tuning + Model Training (Objective BBW Formula)"
             )
             print(f"{separator}")
-            print(f"📄 LOG 檔: {self.logger.log_file}")
-            print(f"📄 JSON 檔: {self.logger.json_file}")
+            print(f"[LOG] Log file: {self.logger.log_file}")
+            print(f"[JSON] JSON file: {self.logger.json_file}")
 
             # ========================================
-            # 階段1: 超參数調優
+            # 階段1: 超參數調優
             # ========================================
-            print(f"\n\u2b07️  階段1: 超參数調優...")
+            print(f"\n[PHASE 1] Phase 1: Hyperparameter Tuning...")
             print("-" * 80)
 
             if self.quick_mode:
@@ -242,7 +247,7 @@ class IntegratedTrainingPipelineV2:
                 timeframes = self.trainer.loader.timeframes
 
             print(
-                f"調整目標: {len(symbols)} 幣种 x {len(timeframes)} 時框"
+                f"[INFO] Targets: {len(symbols)} symbols x {len(timeframes)} timeframes"
             )
 
             for symbol in symbols:
@@ -261,7 +266,7 @@ class IntegratedTrainingPipelineV2:
                             )
                         else:
                             self.logger.log_tuning_error(
-                                symbol, timeframe, "無法提取特徵"
+                                symbol, timeframe, "Cannot extract features"
                             )
 
                     except Exception as e:
@@ -270,7 +275,7 @@ class IntegratedTrainingPipelineV2:
             # ========================================
             # 階段2: 模型訓練
             # ========================================
-            print(f"\n\u2b07️  階段2: 模型訓練...")
+            print(f"\n[PHASE 2] Phase 2: Model Training...")
             print("-" * 80)
 
             self.trainer.train_all_symbols(symbols=symbols, timeframes=timeframes)
@@ -281,20 +286,20 @@ class IntegratedTrainingPipelineV2:
             self.logger.save_results()
             self.logger.print_summary()
 
-            print(f"\n{separator}")
-            print("✅ 訓練完成！")
+            print(f"{separator}")
+            print(f"[SUCCESS] Training Completed!")
             print(f"{separator}\n")
 
             return True
 
         except KeyboardInterrupt:
-            print("\n⚠️ 訓練被中斷 (Ctrl+C)")
+            print("\n[INTERRUPTED] Training interrupted by user (Ctrl+C)")
             self.logger.save_results()
             self.logger.print_summary()
             sys.exit(1)
 
         except Exception as e:
-            print(f"\n⚠️ 错誤: {e}")
+            print(f"\n[ERROR] Error: {e}")
             self.logger.save_results()
             self.logger.print_summary()
             import traceback
