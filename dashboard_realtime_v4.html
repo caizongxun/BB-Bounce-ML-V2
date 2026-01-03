@@ -265,7 +265,7 @@
             color: #ffc107;
         }
 
-        /* 接近程度段 */
+        /* 接近程度段 - 這是關鍵！箋染下方 */
         .approaching-progress {
             background: rgba(30, 30, 30, 0.6);
             border: 1px solid rgba(0, 188, 212, 0.2);
@@ -733,7 +733,7 @@
                 }
                 return null;
             } catch (error) {
-                console.error(`取得 ${symbol} 數據失敗:`, error);
+                console.error(`取得 ${symbol} 數據失效:`, error);
                 return null;
             }
         }
@@ -765,12 +765,15 @@
             const container = document.getElementById('detail-content');
             
             try {
-                container.innerHTML = '<div class="loading-text">正在加載數據...</div>';
+                // 如果是第一次, 会显示加載信息
+                if (container.textContent.includes('選擇幣種和時間')) {
+                    container.innerHTML = '<div class="loading-text">正在加載数据...</div>';
+                }
                 
-                // 第1步：從 Binance 取數據
+                // 第1步：從 Binance 取数据
                 const ohlcv = await fetchOHLCV(symbol, timeframe);
                 if (!ohlcv) {
-                    container.innerHTML = `<div class="empty-state"><div class="empty-state-title">錯誤</div><p>無法从 Binance 取得數據</p></div>`;
+                    container.innerHTML = `<div class="empty-state"><div class="empty-state-title">錯誤</div><p>無法从 Binance 取得数据</p></div>`;
                     return;
                 }
 
@@ -781,11 +784,12 @@
                     body: JSON.stringify({
                         symbol: symbol,
                         timeframe: timeframe,
-                        ohlcv: ohlcv  // 基本實時數據
+                        ohlcv: ohlcv  // 实时数据
                     })
                 });
 
                 const data = await response.json();
+                // 一次性渲染整个HTML（第一次或切换幣种时）
                 container.innerHTML = renderDetailPanel(data, symbol, timeframe, ohlcv);
                 updateTimestamp();
             } catch (error) {
@@ -817,16 +821,16 @@
             else if (volLevel === 'high') volClass = 'vol-high';
             else if (volLevel === 'moderate') volClass = 'vol-moderate';
 
-            // 接近程度 HTML
+            // 接近程度 HTML - 关键！晎渲下方
             let approachingHTML = '';
             if (bb.bb_upper && bb.current_high) {
                 const distToUpper = ((bb.bb_upper - bb.current_high) / bb.current_high * 100).toFixed(2);
                 const distToLower = ((bb.current_low - bb.bb_lower) / bb.current_low * 100).toFixed(2);
-                const maxDist = 5; // 最大顯示 5%
+                const maxDist = 5; // 最大显示 5%
 
                 approachingHTML = `
                     <div class="approaching-progress">
-                        <div class="progress-title">接近程度監測 (基於 Binance 實時數據)</div>
+                        <div class="progress-title">\ud83d\udcc8 接近程度監測 (从 Binance 实时数据)</div>
                         <div class="progress-row">
                             <div class="progress-label">接近上軌</div>
                             <div class="progress-bar">
@@ -852,15 +856,15 @@
             return `
                 <div class="detail-grid">
                     <div class="detail-item">
-                        <div class="detail-label">幣種</div>
+                        <div class="detail-label">幣种</div>
                         <div class="detail-value">${symbol}</div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">時間框架</div>
+                        <div class="detail-label">时间框架</div>
                         <div class="detail-value">${timeframe}</div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">觸厬狀態</div>
+                        <div class="detail-label">触及状态</div>
                         <div class="detail-value ${statusClass}">${statusText}</div>
                     </div>
                     <div class="detail-item">
@@ -868,20 +872,20 @@
                         <div class="detail-value">${confidence}%</div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">當前價格 (OHLCV)</div>
+                        <div class="detail-label">当前价格 (OHLCV)</div>
                         <div class="detail-value">${ohlcv.close.toFixed(2)}</div>
                     </div>
                     ${vol.volatility_level ? `
                         <div class="detail-item">
-                            <div class="detail-label">波動性級別</div>
+                            <div class="detail-label">波动性级别</div>
                             <div class="detail-value ${volClass}">${volLevel.toUpperCase()}</div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">波動性數值</div>
+                            <div class="detail-label">波动性数值</div>
                             <div class="detail-value">${parseFloat(vol.predicted_vol).toFixed(3)}</div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">擴張強度</div>
+                            <div class="detail-label">扩张强度</div>
                             <div class="detail-value">${(vol.expansion_strength * 100).toFixed(1)}%</div>
                         </div>
                     ` : ''}
@@ -891,7 +895,7 @@
                             <div class="detail-value">${parseFloat(bb.bb_upper).toFixed(2)}</div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">中線</div>
+                            <div class="detail-label">中线</div>
                             <div class="detail-value">${parseFloat(bb.bb_middle).toFixed(2)}</div>
                         </div>
                         <div class="detail-item">
@@ -899,11 +903,11 @@
                             <div class="detail-value">${parseFloat(bb.bb_lower).toFixed(2)}</div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">當前高點</div>
+                            <div class="detail-label">当前高点</div>
                             <div class="detail-value">${parseFloat(bb.current_high).toFixed(2)}</div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">當前低點</div>
+                            <div class="detail-label">当前低点</div>
                             <div class="detail-value">${parseFloat(bb.current_low).toFixed(2)}</div>
                         </div>
                     ` : ''}
@@ -912,7 +916,7 @@
             `;
         }
 
-        // 所有幣種更新
+        // 所有幣种更新
         async function updateAllSymbols() {
             const container = document.getElementById('symbols-container');
             
@@ -935,10 +939,10 @@
                     const data = await response.json();
                     html += renderSymbolCard(data, symbol, ohlcv);
                 }
-                container.innerHTML = html || '<div class="empty-state"><div class="empty-state-title">沒有數據</div></div>';
+                container.innerHTML = html || '<div class="empty-state"><div class="empty-state-title">沒有数据</div></div>';
                 updateTimestamp();
             } catch (error) {
-                container.innerHTML = `<div class="empty-state"><div class="empty-state-title">載入失敗</div></div>`;
+                container.innerHTML = `<div class="empty-state"><div class="empty-state-title">載入失敖</div></div>`;
             }
         }
 
@@ -970,7 +974,7 @@
             const now = new Date();
             const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
 
-            // 距離進度條 HTML
+            // 距离进度条 HTML
             let distanceHTML = '';
             if (bb.bb_upper && bb.current_high) {
                 const distToUpper = ((bb.bb_upper - bb.current_high) / bb.current_high * 100).toFixed(2);
@@ -1009,7 +1013,7 @@
                             <div class="symbol-metric-value">${((bb.confidence || 0) * 100).toFixed(1)}%</div>
                         </div>
                         <div class="symbol-metric">
-                            <div class="symbol-metric-label">波動性</div>
+                            <div class="symbol-metric-label">波动性</div>
                             <div class="symbol-metric-value">${(vol.expansion_strength || 0).toFixed(2)}</div>
                         </div>
                     </div>
@@ -1020,7 +1024,7 @@
                                 <div class="symbol-bb-value">${parseFloat(bb.bb_upper).toFixed(0)}</div>
                             </div>
                             <div class="symbol-bb-item">
-                                <div class="symbol-bb-label">中線</div>
+                                <div class="symbol-bb-label">中线</div>
                                 <div class="symbol-bb-value">${parseFloat(bb.bb_middle).toFixed(0)}</div>
                             </div>
                             <div class="symbol-bb-item">
@@ -1028,7 +1032,7 @@
                                 <div class="symbol-bb-value">${parseFloat(bb.bb_lower).toFixed(0)}</div>
                             </div>
                             <div class="symbol-bb-item">
-                                <div class="symbol-bb-label">現價</div>
+                                <div class="symbol-bb-label">現价</div>
                                 <div class="symbol-bb-value">${ohlcv.close.toFixed(0)}</div>
                             </div>
                         </div>
@@ -1042,7 +1046,7 @@
         function updateTimestamp() {
             const now = new Date();
             const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
-            document.getElementById('last-update').textContent = `最後更新: ${timeStr}`;
+            document.getElementById('last-update').textContent = `最会更新: ${timeStr}`;
         }
 
         function toggleAutoUpdate() {
