@@ -387,48 +387,75 @@
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script>
-    const socket = io(getSocketURL(), {
-      reconnection: true,
-      transports: ['websocket', 'polling']
-    });
-
+    let socket = null;
     let diagnosticData = {};
     let recentSignals = [];
 
-    function getSocketURL() {
+    function initializeSocket() {
+      console.log('[Socket] Initializing connection...');
+      
+      // 獲取當前主機和端口
       const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
-      const host = window.location.hostname;
-      const port = window.location.port ? ':' + window.location.port : '';
-      return `${protocol}://${host}${port}`;
+      const hostname = window.location.hostname;
+      const port = window.location.port || (protocol === 'https' ? 443 : 80);
+      
+      // 如果在 localhost:5000 上開發
+      let socketURL = `${protocol}://${hostname}:${port}`;
+      
+      console.log(`[Socket] Connecting to: ${socketURL}`);
+      
+      socket = io(socketURL, {
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 5,
+        transports: ['websocket', 'polling'],
+        forceNew: true
+      });
+
+      socket.on('connect', onSocketConnect);
+      socket.on('disconnect', onSocketDisconnect);
+      socket.on('diagnostics_response', onDiagnosticsResponse);
+      socket.on('realtime_signal', onRealtimeSignal);
+      socket.on('error', onSocketError);
+      socket.on('connect_error', onConnectError);
     }
 
-    socket.on('connect', () => {
+    function onSocketConnect() {
+      console.log('[Socket] Connected successfully!');
       updateStatus('server-status', '已連接', 'ok');
       updateStatus('websocket-status', '已連接', 'ok');
       requestDiagnostics();
-    });
+    }
 
-    socket.on('disconnect', () => {
+    function onSocketDisconnect(reason) {
+      console.log('[Socket] Disconnected:', reason);
       updateStatus('server-status', '已斷開', 'error');
       updateStatus('websocket-status', '已斷開', 'error');
-    });
+    }
 
-    socket.on('diagnostics_response', (data) => {
+    function onDiagnosticsResponse(data) {
+      console.log('[Socket] Received diagnostics:', data);
       diagnosticData = data;
       renderDiagnostics(data);
-    });
+    }
 
-    socket.on('realtime_signal', (signal) => {
+    function onRealtimeSignal(signal) {
+      console.log('[Socket] New signal:', signal);
       recentSignals.unshift(signal);
       if (recentSignals.length > 10) {
         recentSignals.pop();
       }
       updateSignalsTable();
       updateSignalStats();
-    });
+    }
 
-    function requestDiagnostics() {
-      socket.emit('request_diagnostics', {});
+    function onSocketError(error) {
+      console.error('[Socket] Error:', error);
+    }
+
+    function onConnectError(error) {
+      console.error('[Socket] Connection error:', error);
     }
 
     function updateStatus(elementId, status, type) {
@@ -436,6 +463,15 @@
       if (el) {
         el.textContent = status;
         el.className = `info-value ${type}`;
+      }
+    }
+
+    function requestDiagnostics() {
+      if (socket && socket.connected) {
+        console.log('[Socket] Requesting diagnostics...');
+        socket.emit('request_diagnostics', {});
+      } else {
+        console.warn('[Socket] Not connected, cannot request diagnostics');
       }
     }
 
@@ -459,10 +495,10 @@
       classifierTable.innerHTML = '';
       (data.classifiers || []).forEach(classifier => {
         const row = document.createElement('tr');
-        const statusClass = classifier.status === '已加載' ? 'ok' : 'warning';
+        const isDotLoaded = classifier.status === '已加載';
         row.innerHTML = `
           <td><strong>${classifier.symbol}</strong></td>
-          <td><span class="symbol-status"><div class="dot ${classifier.status === '已加載' ? 'loaded' : 'default'}"></div>${classifier.status}</span></td>
+          <td><span class="symbol-status"><div class="dot ${isDotLoaded ? 'loaded' : 'default'}"></div>${classifier.status}</span></td>
           <td style="font-size: 11px; color: var(--color-gray-300);">${classifier.file || 'N/A'}</td>
           <td>${classifier.features || '-'}</td>
           <td style="font-size: 11px;">${classifier.diagnosis || '-'}</td>
@@ -475,10 +511,10 @@
       validityTable.innerHTML = '';
       (data.validity_models || []).forEach(model => {
         const row = document.createElement('tr');
-        const statusClass = model.status === '已加載' ? 'ok' : 'warning';
+        const isDotLoaded = model.status === '已加載';
         row.innerHTML = `
           <td><strong>${model.symbol}</strong></td>
-          <td><span class="symbol-status"><div class="dot ${model.status === '已加載' ? 'loaded' : 'default'}"></div>${model.status}</span></td>
+          <td><span class="symbol-status"><div class="dot ${isDotLoaded ? 'loaded' : 'default'}"></div>${model.status}</span></td>
           <td style="font-size: 11px; color: var(--color-gray-300);">${model.file || 'N/A'}</td>
           <td>${model.features || '-'}</td>
           <td style="font-size: 11px;">${model.diagnosis || '-'}</td>
@@ -508,7 +544,7 @@
           <td style="font-size: 11px;">${new Date(signal.timestamp).toLocaleTimeString('zh-TW')}</td>
           <td>${signal.side === 'long' ? '多頭 ↑' : '空頭 ↓'}</td>
           <td>${signal.bb_position_label}</td>
-          <td style="color: ${signal.validity_prob >= 0.75 ? 'var(--color-green-500)' : 'var(--color-yellow-400)'};">
+          <td style="color: ${signal.validity_prob >= 0.75 ? 'var(--color-green-500)' : 'var(--color-yellow-400)'};font-weight:600;">
             ${(signal.validity_prob * 100).toFixed(0)}%
           </td>
           <td>${signal.rsi ? signal.rsi.toFixed(1) : '-'}</td>
@@ -538,12 +574,22 @@
     }
 
     function refreshDiagnostics() {
+      console.log('[UI] Refreshing diagnostics...');
       requestDiagnostics();
     }
 
     // 初始化
+    console.log('[App] Initializing debug dashboard...');
+    initializeSocket();
     updateSignalsTable();
     updateSignalStats();
+
+    // 每 10 秒自動刷新一次診斷
+    setInterval(() => {
+      if (socket && socket.connected) {
+        requestDiagnostics();
+      }
+    }, 10000);
   </script>
 </body>
 </html>
