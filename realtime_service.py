@@ -5,6 +5,7 @@ import threading
 import time
 from datetime import datetime
 from realtime_detector_v2 import RealtimeBBDetectorV2
+from data_fetcher import DataFetcher
 import logging
 
 app = Flask(__name__, template_folder="templates")
@@ -15,6 +16,13 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 # 配置日誌
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
 logger = logging.getLogger(__name__)
+
+# 初始化數據獲取器
+# 優先使用 Binance US (推薦),  自動回退到 yfinance
+data_fetcher = DataFetcher(
+    preferred_source="binance",
+    fallback_to_yfinance=True
+)
 
 # 初始化二層檢測器 V2
 bb_detector_v2 = RealtimeBBDetectorV2(
@@ -35,17 +43,145 @@ last_signals = {}
 user_selected_symbols = {}  # sid -> set of selected symbols
 user_timeframes = {}  # sid -> current timeframe
 user_detection_modes = {}  # sid -> detection mode
+last_candles_fetch_time = 0
+fetch_interval = 5  # 每 5 秒從交易所取得 K 線
+
+
+def calculate_technical_indicators(candles):
+    """
+    計算技術指標 (RSI, ADX, ATR, BB)
+    
+    添加到每個 candle: rsi, adx, atr, bb_upper, bb_middle, bb_lower, bb_width
+    """
+    if len(candles) < 20:
+        return candles
+    
+    try:
+        import numpy as np
+        
+        closes = np.array([c.get("close", 0) for c in candles])
+        highs = np.array([c.get("high", 0) for c in candles])
+        lows = np.array([c.get("low", 0) for c in candles])
+        
+        # ===== RSI (Relative Strength Index) =====
+        deltas = np.diff(closes)
+        seed = deltas[:1]
+        up = seed[seed >= 0].sum() / 1 if len(seed[seed >= 0]) > 0 else 0
+        down = -seed[seed < 0].sum() / 1 if len(seed[seed < 0]) > 0 else 0
+        
+        rs = np.zeros_like(closes)
+        rs[:1] = 100. if down != 0 else 0.
+        
+        for i in range(1, len(closes)):
+            delta = deltas[i - 1]
+            if delta > 0:
+                upval = delta
+                downval = 0.
+            else:
+                upval = 0.
+                downval = -delta
+            
+            up = (up * 13. + upval) / 14.
+            down = (down * 13. + downval) / 14.
+            
+            rs[i] = 100. if down != 0 else (100. if up != 0 else 0.)
+        
+        rsi = np.where(rs != 0, 100. - 100. / (1. + up / down), 0.)
+        
+        # ===== Bollinger Bands =====
+        sma = np.convolve(closes, np.ones(20) / 20, mode='valid')
+        sma = np.pad(sma, (len(closes) - len(sma), 0), 'edge')
+        
+        std = np.array([np.std(closes[max(0, i-19):i+1]) for i in range(len(closes))])
+        bb_upper = sma + 2 * std
+        bb_lower = sma - 2 * std
+        bb_middle = sma
+        bb_width = bb_upper - bb_lower
+        
+        # ===== ATR (Average True Range) =====
+        tr = np.zeros_like(closes)
+        for i in range(len(closes)):
+            high_low = highs[i] - lows[i]
+            high_close = abs(highs[i] - closes[i-1]) if i > 0 else high_low
+            low_close = abs(lows[i] - closes[i-1]) if i > 0 else high_low
+            tr[i] = max(high_low, high_close, low_close)
+        
+        atr = np.convolve(tr, np.ones(14) / 14, mode='same')
+        
+        # ===== ADX (Average Directional Index) - 簡化版 =====
+        plus_dm = np.zeros_like(closes)
+        minus_dm = np.zeros_like(closes)
+        
+        for i in range(1, len(closes)):
+            up_move = highs[i] - highs[i-1]
+            down_move = lows[i-1] - lows[i]
+            
+            if up_move > down_move and up_move > 0:
+                plus_dm[i] = up_move
+            if down_move > up_move and down_move > 0:
+                minus_dm[i] = down_move
+        
+        plus_di = np.convolve(plus_dm / (atr + 0.001), np.ones(14) / 14, mode='same') * 100
+        minus_di = np.convolve(minus_dm / (atr + 0.001), np.ones(14) / 14, mode='same') * 100
+        
+        dx = abs(plus_di - minus_di) / (plus_di + minus_di + 0.001) * 100
+        adx = np.convolve(dx, np.ones(14) / 14, mode='same')
+        
+        # 應用指標到每個 candle
+        for i in range(len(candles)):
+            candles[i]["rsi"] = float(rsi[i]) if not np.isnan(rsi[i]) else 50.0
+            candles[i]["bb_upper"] = float(bb_upper[i]) if not np.isnan(bb_upper[i]) else 0.0
+            candles[i]["bb_middle"] = float(bb_middle[i]) if not np.isnan(bb_middle[i]) else 0.0
+            candles[i]["bb_lower"] = float(bb_lower[i]) if not np.isnan(bb_lower[i]) else 0.0
+            candles[i]["bb_width"] = float(bb_width[i]) if not np.isnan(bb_width[i]) else 0.0
+            candles[i]["atr"] = float(atr[i]) if not np.isnan(atr[i]) else 0.0
+            candles[i]["adx"] = float(adx[i]) if not np.isnan(adx[i]) else 20.0
+    
+    except Exception as e:
+        logger.warning(f"[calculate_technical_indicators] Error: {e}")
+    
+    return candles
 
 
 def fetch_latest_candles(symbols, timeframe="15m"):
     """
-    從交易所 API 取得最新 K 線
-    注意: 這是假實現，請根據你的實際數據源 (Binance, 本機DB等) 修改
+    從交易所 API 取得最新 K 線並計算技術指標
+    
+    使用 DataFetcher 自動選擇最佳數據源 (Binance 或 yfinance)
     """
-    candles_dict = {}
-    for symbol in symbols:
-        candles_dict[symbol] = []
-    return candles_dict
+    global last_candles_fetch_time
+    
+    current_time = time.time()
+    if current_time - last_candles_fetch_time < fetch_interval:
+        # 回避頻繁請求
+        return {}
+    
+    last_candles_fetch_time = current_time
+    
+    try:
+        # 從數據源取得原始 K 線
+        raw_candles = data_fetcher.get_klines(
+            symbols=symbols,
+            timeframe=timeframe,
+            limit=100  # 取 100 根 K 線 (用來計算指標)
+        )
+        
+        # 計算每個幣種的技術指標
+        candles_dict = {}
+        for symbol, candles in raw_candles.items():
+            if len(candles) > 0:
+                # 計算技術指標
+                candles_with_indicators = calculate_technical_indicators(candles)
+                candles_dict[symbol] = candles_with_indicators
+            else:
+                candles_dict[symbol] = []
+        
+        logger.debug(f"[fetch_latest_candles] Fetched data for {len(candles_dict)} symbols")
+        return candles_dict
+    
+    except Exception as e:
+        logger.error(f"[fetch_latest_candles] Error: {e}")
+        return {sym: [] for sym in symbols}
 
 
 def realtime_scan_loop():
@@ -53,13 +189,14 @@ def realtime_scan_loop():
     實時掃描 loop: 每 5 秒執行一次
     
     流程:
-    1. 取得最新 K 線
+    1. 取得最新 K 線 + 計算技術指標
     2. 加入 detector 緩衝區
     3. 執行二層掃描 (所有 22 個幣種)
     4. 推送信號到前端 (WebSocket)
     5. 更新所有幣種狀態
     """
     logger.info("[realtime_scan_loop] Started (5-second interval)...")
+    logger.info(f"[realtime_scan_loop] Data source status: {'Available' if data_fetcher.is_available() else 'Not available'}")
     
     while scan_active:
         try:
@@ -72,7 +209,9 @@ def realtime_scan_loop():
             # 2. 加入檢測器緩衝區
             for symbol, candles in latest_candles.items():
                 if len(candles) > 0:
-                    for candle in candles:
+                    # 只添加最新的 K 線 (最後一個)
+                    # 或者全部添加以保持完整歷史
+                    for candle in candles[-5:]:  # 保留最新 5 根 K 線
                         bb_detector_v2.add_candle(symbol, candle)
             
             # 3. 執行二層掃描 (所有 22 個幣種)
@@ -145,6 +284,17 @@ def api_symbol_state(symbol):
     return state
 
 
+@app.route("/api/status")
+def api_status():
+    return {
+        "data_source": "Binance US" if (data_fetcher.binance_fetcher and data_fetcher.binance_fetcher.initialized) else "yfinance",
+        "data_source_available": data_fetcher.is_available(),
+        "symbols_monitored": len(bb_detector_v2.symbols),
+        "signals_count": len(last_signals),
+        "scanner_active": scan_active,
+    }
+
+
 # ========== WebSocket Events ==========
 
 @socketio.on("connect")
@@ -162,6 +312,7 @@ def handle_connect():
         "status": "connected",
         "symbols": bb_detector_v2.symbols,
         "count": len(bb_detector_v2.symbols),
+        "data_source": "Binance US" if (data_fetcher.binance_fetcher and data_fetcher.binance_fetcher.initialized) else "yfinance",
         "available_models": [
             "volatility_classifier",
             "bb_band_classifier", 
@@ -292,11 +443,16 @@ def handle_force_refresh(data):
 # ========== 應用啟動 ==========
 
 if __name__ == "__main__":
+    # 檢查數據源
+    data_source_status = "Available" if data_fetcher.is_available() else "❌ Not available"
+    data_source_name = "Binance US" if (data_fetcher.binance_fetcher and data_fetcher.binance_fetcher.initialized) else "yfinance"
+    
     print("\n" + "="*70)
     print("BB Bounce ML Realtime Detector V2 - Service")
     print("="*70)
     print(f"Monitoring {len(bb_detector_v2.symbols)} symbols")
     print(f"Scan interval: 5 seconds")
+    print(f"Data Source: {data_source_name} - {data_source_status}")
     print(f"Available detection models:")
     print(f"  • Volatility Classifier (波動大小分類)")
     print(f"  • BB Band Classifier (上下軌分類)")
