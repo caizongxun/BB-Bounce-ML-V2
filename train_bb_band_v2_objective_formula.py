@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 使用客觀 BBW 公式的 Bollinger Band 反弹有效性 V2 訓練器
 
-改进內容：
+改進内容：
 1. 特征定義使用客觀 BBW 公式
    - BBW = (Upper - Lower) / Middle × 100
    - is_squeeze = BBW < 4%
@@ -36,8 +37,13 @@ from xgboost import XGBClassifier
 import pickle
 import json
 import warnings
+import io
+import sys
 
 warnings.filterwarnings("ignore")
+
+# 修複 Windows Unicode 編碼
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -47,13 +53,13 @@ logger = logging.getLogger(__name__)
 try:
     from data_loader import CryptoDataLoader
 except ImportError:
-    logger.error("找不到 data_loader")
+    logger.error("[ERROR] Cannot find data_loader")
     exit(1)
 
 
 class BBContractionFeatureExtractorV3_Objective:
     """
-    使用客觀 BBW 公式的特徵提取器
+    使用客觀 BBW 公式的特征提取器
     """
 
     def __init__(self):
@@ -174,7 +180,7 @@ class BBContractionFeatureExtractorV3_Objective:
             # 上升幅度 > 0.5%，算「有效反彈"
             if max_price > current_price * 1.005:
                 # 再看有沒有回落，判定是否為有效反彈
-                # (簡化：直接視為 1)
+                # (简化：直接視為 1)
                 df.loc[df.index[i], "label_bounce_valid"] = 1
             else:
                 df.loc[df.index[i], "label_bounce_valid"] = 0
@@ -215,26 +221,26 @@ class BBContractionModelTrainerV2_Objective:
         訓練單個幣種的模型
         """
         logger.info(f"\n{'='*80}")
-        logger.info(f"訓練 {symbol} {timeframe} - BB 反彈有效性 V2 (客觀公式)")
+        logger.info(f"[TRAINING] {symbol} {timeframe} - BB Bounce Validity V2 (Objective Formula)")
         logger.info(f"{'='*80}")
 
         try:
             # ============================================================
             # 1. 下載數據
             # ============================================================
-            logger.info(f"⬇️  下載 {symbol} {timeframe} 數據...")
+            logger.info(f"[DOWNLOAD] Downloading {symbol} {timeframe} data...")
             df = self.loader.download_symbol_data(symbol, timeframe)
 
             if df is None or len(df) < 100:
-                logger.error(f"{symbol} {timeframe} 數據不足")
+                logger.error(f"[ERROR] {symbol} {timeframe} - Insufficient data")
                 return False
 
-            logger.info(f"✅ {symbol} {timeframe}: {len(df)} 根 K 棒")
+            logger.info(f"[OK] {symbol} {timeframe}: {len(df)} candles")
 
             # ============================================================
             # 2. 提取特徵（使用客觀公式）
             # ============================================================
-            logger.info(f"🔧 提取特徵...")
+            logger.info(f"[FEATURES] Extracting features...")
             extractor = BBContractionFeatureExtractorV3_Objective()
             df = extractor.create_features(df, timeframe=timeframe, lookahead=5)
 
@@ -244,14 +250,14 @@ class BBContractionModelTrainerV2_Objective:
             df_labeled = df[df["label_bounce_valid"] != -1].copy()
 
             if len(df_labeled) < 50:
-                logger.error(f"{symbol} {timeframe} 有效樣本不足")
+                logger.error(f"[ERROR] {symbol} {timeframe} - Insufficient labeled samples")
                 return False
 
-            logger.info(f"📊 標籤分布：")
+            logger.info(f"[LABELS] Distribution:")
             valid_count = (df_labeled["label_bounce_valid"] == 1).sum()
             invalid_count = (df_labeled["label_bounce_valid"] == 0).sum()
-            logger.info(f"  有效反彈 (1): {valid_count:,} 個 ({valid_count/len(df_labeled)*100:.1f}%)")
-            logger.info(f"  無效反彈 (0): {invalid_count:,} 個 ({invalid_count/len(df_labeled)*100:.1f}%)")
+            logger.info(f"  Valid bounces (1): {valid_count:,} ({valid_count/len(df_labeled)*100:.1f}%)")
+            logger.info(f"  Invalid bounces (0): {invalid_count:,} ({invalid_count/len(df_labeled)*100:.1f}%)")
 
             # ============================================================
             # 4. 準備訓練數據
@@ -271,11 +277,10 @@ class BBContractionModelTrainerV2_Objective:
             X = X.fillna(0)
 
             if len(X) < 30:
-                logger.error(f"{symbol} {timeframe} 清潔後樣本不足")
+                logger.error(f"[ERROR] {symbol} {timeframe} - Insufficient samples after cleaning")
                 return False
 
-            logger.info(f"📈 特徵數：{len(feature_cols)}")
-            logger.info(f"📈 有效樣本：{len(X):,}")
+            logger.info(f"[DATA] Features: {len(feature_cols)}, Samples: {len(X):,}")
 
             # ============================================================
             # 5. 分割訓練/測試集
@@ -299,7 +304,7 @@ class BBContractionModelTrainerV2_Objective:
             # ============================================================
             # 7. 訓練模型（使用優化超參數）
             # ============================================================
-            logger.info(f"🤖 訓練 XGBoost 分類器...")
+            logger.info(f"[MODEL] Training XGBoost classifier...")
             
             # 預設超參數（可以用 hyperparameter_tuning.py 調整）
             params = {
@@ -337,15 +342,15 @@ class BBContractionModelTrainerV2_Objective:
             cm = confusion_matrix(y_test, y_pred)
             top_features = np.argsort(model.feature_importances_)[-8:][::-1]
 
-            logger.info(f"\n📊 測試集性能：")
-            logger.info(f"  準確率: {accuracy:.4f} ({accuracy*100:.2f}%)")
-            logger.info(f"  精準度: {precision:.4f}")
-            logger.info(f"  召回率: {recall:.4f}")
-            logger.info(f"  F1 分數: {f1:.4f}")
+            logger.info(f"\n[RESULTS] Test Set Performance:")
+            logger.info(f"  Accuracy: {accuracy:.4f} ({accuracy*100:.2f}%)")
+            logger.info(f"  Precision: {precision:.4f}")
+            logger.info(f"  Recall: {recall:.4f}")
+            logger.info(f"  F1 Score: {f1:.4f}")
             logger.info(f"  AUC: {auc:.4f}")
-            logger.info(f"\n🎯 混淆矩陣：")
+            logger.info(f"\n[CONFUSION] Confusion Matrix:")
             logger.info(f"  {cm}")
-            logger.info(f"\n⭐ 前 8 重要特徵：")
+            logger.info(f"\n[TOP8] Top 8 Important Features:")
             for idx in top_features:
                 logger.info(
                     f"  {feature_cols[idx]}: {model.feature_importances_[idx]:.4f}"
@@ -368,14 +373,14 @@ class BBContractionModelTrainerV2_Objective:
             with open(features_file, "w") as f:
                 json.dump(feature_cols, f, indent=2)
 
-            logger.info(f"\n✅ 模型已保存：")
+            logger.info(f"\n[SAVED] Models saved to:")
             logger.info(f"  {model_file}")
             logger.info(f"  {scaler_file}")
 
             return True
 
         except Exception as e:
-            logger.error(f"\n❌ 錯誤: {e}")
+            logger.error(f"\n[ERROR] Exception: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -390,10 +395,10 @@ class BBContractionModelTrainerV2_Objective:
             timeframes = self.loader.timeframes
 
         logger.info(f"\n{'='*80}")
-        logger.info(f"🚀 開始訓練 BB 反彈有效性 V2 (客觀公式)")
+        logger.info(f"[START] Starting BB Bounce Validity V2 Training (Objective Formula)")
         logger.info(f"{'='*80}")
-        logger.info(f"幣種: {len(symbols)}，時框: {len(timeframes)}")
-        logger.info(f"總任務: {len(symbols) * len(timeframes)}")
+        logger.info(f"[INFO] Symbols: {len(symbols)}, Timeframes: {len(timeframes)}")
+        logger.info(f"[INFO] Total tasks: {len(symbols) * len(timeframes)}")
 
         success_count = 0
         fail_count = 0
@@ -406,11 +411,11 @@ class BBContractionModelTrainerV2_Objective:
                     fail_count += 1
 
         logger.info(f"\n{'='*80}")
-        logger.info(f"✅ 訓練完成")
+        logger.info(f"[COMPLETED] Training Complete")
         logger.info(f"{'='*80}")
-        logger.info(f"成功: {success_count}/{success_count + fail_count}")
-        logger.info(f"失敗: {fail_count}/{success_count + fail_count}")
-        logger.info(f"模型位置: {self.output_dir}")
+        logger.info(f"[RESULTS] Success: {success_count}/{success_count + fail_count}")
+        logger.info(f"[RESULTS] Failed: {fail_count}/{success_count + fail_count}")
+        logger.info(f"[RESULTS] Model location: {self.output_dir}")
 
 
 if __name__ == "__main__":
