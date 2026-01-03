@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 BB反彈ML系統 - 實時服務 V5 (簡化版)
-直接計算 BB 通道，檢測 K 棒高低點接近程度
-無需分類器
+直接計算 BB 通道
+先棂測接近/接觸 -> 偏债呼賦模型 + 波動性模型
 """
 
 import numpy as np
@@ -14,6 +14,8 @@ from datetime import datetime
 import logging
 from collections import deque
 import warnings
+import joblib
+import pickle
 
 warnings.filterwarnings('ignore')
 
@@ -43,17 +45,21 @@ TIMEFRAMES = ['15m', '1h']
 BB_PERIOD = 20
 BB_STD = 2
 
-# 接近閾值
-APPROACHING_THRESHOLD = 0.02  # 2%
-WARNING_THRESHOLD = 0.05      # 5%
-DANGER_THRESHOLD = 0.01       # 1%
+# 接近/接觸閾值
+TOUCHED_THRESHOLD = 0.002    # 0.2% - 接觸
+                             # (K棒高/低點宜實距離 BB 軌道)
+APPROACHING_DANGER = 0.01    # 1%  - 接近危險
+APPROACHING_WARNING = 0.02   # 2%  - 接近警告
+APPROACHING_CAUTION = 0.05   # 5%  - 接近注意
+
+MODELS_DIR = Path('./models')
 
 # ============================================================
 # BB 計算器
 # ============================================================
 
 class BBCalculator:
-    """直接計算 BB 通道，不使用分類器"""
+    """直接計算 BB 通道，檢測接近/接觸"""
     
     def __init__(self, history_size=100):
         self.history_size = history_size
@@ -113,7 +119,6 @@ class BBCalculator:
             return None, None
         
         if len(highs) < lookback:
-            # 如果歷史不足，就用全部
             lookback = len(highs)
         
         lookback_highs = highs[-lookback:]
@@ -124,10 +129,10 @@ class BBCalculator:
         
         return max_high, min_low
     
-    def analyze_approaching(self, symbol, timeframe, current_ohlcv):
+    def analyze_bb_status(self, symbol, timeframe, current_ohlcv):
         """
-        分析 K 棒是否接近 BB 軌道
-        返回：{approaching, direction, distance_percent, warning_level}
+        分析 K 棒是否接近/接觸 BB 軌道
+        返回：{status, direction, distance_percent, warning_level, bb_upper, bb_middle, bb_lower}
         """
         # 更新歷史
         self.update_history(symbol, timeframe, current_ohlcv)
@@ -136,13 +141,15 @@ class BBCalculator:
         bb_upper, bb_middle, bb_lower, bb_width = self.calculate_bb(symbol, timeframe)
         if bb_upper is None:
             return {
-                'approaching': False,
+                'status': 'normal',           # normal, approaching, touched
                 'direction': None,
                 'distance_percent': 0,
-                'warning_level': 'none',
+                'warning_level': 'none',      # none, caution, warning, danger
                 'bb_upper': None,
                 'bb_middle': None,
-                'bb_lower': None
+                'bb_lower': None,
+                'lookback_high': None,
+                'lookback_low': None
             }
         
         # 獲取過去 20 根 K 棒的最高/最低點
@@ -151,53 +158,61 @@ class BBCalculator:
             lookback_high = current_ohlcv.get('high', 0)
             lookback_low = current_ohlcv.get('low', 0)
         
-        # 計算到上軌的距離
+        # 計算到 BB 軌的距離
         dist_to_upper = (bb_upper - lookback_high) / (lookback_high + 1e-8) if lookback_high > 0 else 1.0
-        
-        # 計算到下軌的距離
         dist_to_lower = (lookback_low - bb_lower) / (lookback_low + 1e-8) if lookback_low > 0 else 1.0
         
-        # 判斷接近狀態
-        approaching = False
+        # 判斷狀態
+        status = 'normal'
         direction = None
         distance_percent = 0
         warning_level = 'none'
         
-        # 距離百分比（用於顯示）
-        distance_percent = abs(min(dist_to_upper, dist_to_lower)) * 100
-        
-        # 判斷接近程度
-        if dist_to_upper <= DANGER_THRESHOLD:
-            # 上軌 - 危險等級
-            approaching = True
+        # 先棂測是否接觸
+        if dist_to_upper <= TOUCHED_THRESHOLD:
+            status = 'touched'
             direction = 'upper'
+            distance_percent = dist_to_upper * 100
             warning_level = 'danger'
-        elif dist_to_upper <= APPROACHING_THRESHOLD:
-            # 上軌 - 接近等級
-            approaching = True
+        elif dist_to_lower <= TOUCHED_THRESHOLD:
+            status = 'touched'
+            direction = 'lower'
+            distance_percent = dist_to_lower * 100
+            warning_level = 'danger'
+        # 再棂測是否接近
+        elif dist_to_upper <= APPROACHING_DANGER:
+            status = 'approaching'
             direction = 'upper'
+            distance_percent = dist_to_upper * 100
+            warning_level = 'danger'
+        elif dist_to_lower <= APPROACHING_DANGER:
+            status = 'approaching'
+            direction = 'lower'
+            distance_percent = dist_to_lower * 100
+            warning_level = 'danger'
+        elif dist_to_upper <= APPROACHING_WARNING:
+            status = 'approaching'
+            direction = 'upper'
+            distance_percent = dist_to_upper * 100
             warning_level = 'warning'
-        elif dist_to_upper <= WARNING_THRESHOLD:
-            # 上軌 - 警告等級
+        elif dist_to_lower <= APPROACHING_WARNING:
+            status = 'approaching'
+            direction = 'lower'
+            distance_percent = dist_to_lower * 100
+            warning_level = 'warning'
+        elif dist_to_upper <= APPROACHING_CAUTION:
+            status = 'approaching'
             direction = 'upper'
+            distance_percent = dist_to_upper * 100
             warning_level = 'caution'
-        elif dist_to_lower <= DANGER_THRESHOLD:
-            # 下軌 - 危險等級
-            approaching = True
+        elif dist_to_lower <= APPROACHING_CAUTION:
+            status = 'approaching'
             direction = 'lower'
-            warning_level = 'danger'
-        elif dist_to_lower <= APPROACHING_THRESHOLD:
-            # 下軌 - 接近等級
-            approaching = True
-            direction = 'lower'
-            warning_level = 'warning'
-        elif dist_to_lower <= WARNING_THRESHOLD:
-            # 下軌 - 警告等級
-            direction = 'lower'
+            distance_percent = dist_to_lower * 100
             warning_level = 'caution'
         
         return {
-            'approaching': approaching,
+            'status': status,
             'direction': direction,
             'distance_percent': distance_percent,
             'warning_level': warning_level,
@@ -209,10 +224,137 @@ class BBCalculator:
         }
 
 # ============================================================
+# 有效性 & 波動性模型加載
+# ============================================================
+
+class ModelLoader:
+    @staticmethod
+    def load_model(filepath):
+        """加載模型 (joblib/pickle)"""
+        filepath = Path(filepath)
+        if not filepath.exists():
+            return None
+        try:
+            return joblib.load(filepath)
+        except:
+            try:
+                with open(filepath, 'rb') as f:
+                    return pickle.load(f, encoding='latin1')
+            except:
+                return None
+
+class ValidityChecker:
+    """6709效性檢查 - 只有接近/接觸時才調用"""
+    
+    def __init__(self):
+        self.models = {}  # {(symbol, timeframe): {model, scaler}}
+        self.load_all_models()
+    
+    def load_all_models(self):
+        """?加載有效性模型"""
+        for symbol in SYMBOLS:
+            for timeframe in TIMEFRAMES:
+                model_path = MODELS_DIR / 'validity_models' / symbol / timeframe / 'validity_model.pkl'
+                scaler_path = MODELS_DIR / 'validity_models' / symbol / timeframe / 'scaler.pkl'
+                
+                model = ModelLoader.load_model(model_path)
+                scaler = ModelLoader.load_model(scaler_path)
+                
+                if model and scaler:
+                    self.models[(symbol, timeframe)] = {'model': model, 'scaler': scaler}
+                    logger.info(f'已加載有效性模型: {symbol} {timeframe}')
+    
+    def predict(self, symbol, timeframe, features):
+        """預測有效性"""
+        key = (symbol, timeframe)
+        if key not in self.models:
+            return None
+        
+        try:
+            models = self.models[key]
+            features_scaled = models['scaler'].transform([features])
+            proba = models['model'].predict_proba(features_scaled)[0]
+            valid_prob = float(proba[1]) if len(proba) > 1 else 0.5
+            
+            if valid_prob >= 0.75:
+                quality = 'excellent'
+            elif valid_prob >= 0.65:
+                quality = 'good'
+            elif valid_prob >= 0.50:
+                quality = 'moderate'
+            else:
+                quality = 'weak'
+            
+            return {
+                'valid': valid_prob >= 0.50,
+                'probability': valid_prob * 100,
+                'quality': quality
+            }
+        except Exception as e:
+            logger.error(f'有效性預測失败: {e}')
+            return None
+
+class VolatilityPredictor:
+    """波動性預測 - 只有接近/接觸時才調用"""
+    
+    def __init__(self):
+        self.models = {}  # {(symbol, timeframe): {model, scaler}}
+        self.load_all_models()
+    
+    def load_all_models(self):
+        """加載波動性模型"""
+        for symbol in SYMBOLS:
+            for timeframe in TIMEFRAMES:
+                model_path = MODELS_DIR / 'vol_models' / symbol / timeframe / 'model_regression.pkl'
+                scaler_path = MODELS_DIR / 'vol_models' / symbol / timeframe / 'scaler_regression.pkl'
+                
+                model = ModelLoader.load_model(model_path)
+                scaler = ModelLoader.load_model(scaler_path)
+                
+                if model and scaler:
+                    self.models[(symbol, timeframe)] = {'model': model, 'scaler': scaler}
+                    logger.info(f'已加載波動性模型: {symbol} {timeframe}')
+    
+    def predict(self, symbol, timeframe, features):
+        """預測波動性"""
+        key = (symbol, timeframe)
+        if key not in self.models:
+            return None
+        
+        try:
+            models = self.models[key]
+            features_scaled = models['scaler'].transform([features])
+            predicted_vol = float(models['model'].predict(features_scaled)[0])
+            
+            will_expand = predicted_vol > 1.2
+            expansion_strength = max(0, (predicted_vol - 1.0) / 1.0)
+            
+            if expansion_strength > 1.5:
+                vol_level = 'very_high'
+            elif expansion_strength > 1.0:
+                vol_level = 'high'
+            elif expansion_strength > 0.5:
+                vol_level = 'moderate'
+            else:
+                vol_level = 'low'
+            
+            return {
+                'predicted_vol': predicted_vol,
+                'will_expand': will_expand,
+                'expansion_strength': min(1.0, expansion_strength),
+                'volatility_level': vol_level
+            }
+        except Exception as e:
+            logger.error(f'波動性預測失败: {e}')
+            return None
+
+# ============================================================
 # 初始化
 # ============================================================
 
 bb_calculator = BBCalculator()
+validity_checker = ValidityChecker()
+volatility_predictor = VolatilityPredictor()
 
 # ============================================================
 # API 端點
@@ -230,20 +372,8 @@ def health_check():
 @app.route('/predict', methods=['POST'])
 def predict():
     """
-    預測 K 棒是否接近 BB 軌道
-    
-    輸入：
-    {
-        "symbol": "BTCUSDT",
-        "timeframe": "15m",
-        "ohlcv": {
-            "open": 45000,
-            "high": 45100,
-            "low": 44900,
-            "close": 45050,
-            "volume": 1000
-        }
-    }
+    預測 K 棒是否接近/接觸 BB 軌道
+    先棂測接近/接觸 -> 程光呼賦有效性 + 波動性模型
     """
     try:
         data = request.get_json()
@@ -256,71 +386,51 @@ def predict():
         if timeframe not in TIMEFRAMES:
             return jsonify({'error': f'無效的時間框架: {timeframe}'}), 400
         
-        # 分析接近程度
-        result = bb_calculator.analyze_approaching(symbol, timeframe, ohlcv)
+        # 第一步: 先棂測接近/接觸（純計算）
+        bb_result = bb_calculator.analyze_bb_status(symbol, timeframe, ohlcv)
+        
+        # 第二步: 只有接近/接觸時才調用模型
+        validity_result = None
+        volatility_result = None
+        
+        if bb_result['status'] in ['approaching', 'touched']:
+            # 掠取 17 個特椅（或簡化版勬伛使用粗付特椅）
+            # 按估按傳 OHLCV 的粗付特椅
+            simple_features = np.array([
+                ohlcv.get('open', 0),
+                ohlcv.get('high', 0),
+                ohlcv.get('low', 0),
+                ohlcv.get('close', 0),
+                ohlcv.get('volume', 0)
+            ])
+            
+            # 調用有效性模型
+            validity_result = validity_checker.predict(symbol, timeframe, simple_features[:5])
+            
+            # 調用波動性模型
+            volatility_result = volatility_predictor.predict(symbol, timeframe, simple_features[:5])
         
         return jsonify({
             'symbol': symbol,
             'timeframe': timeframe,
             'timestamp': datetime.now().isoformat(),
             'bb_touch': {
-                'approaching': result['approaching'],
-                'direction': result['direction'],
-                'distance_percent': result['distance_percent'],
-                'warning_level': result['warning_level'],
-                'bb_upper': result['bb_upper'],
-                'bb_middle': result['bb_middle'],
-                'bb_lower': result['bb_lower'],
-                'lookback_high': result['lookback_high'],
-                'lookback_low': result['lookback_low']
-            }
+                'status': bb_result['status'],
+                'direction': bb_result['direction'],
+                'distance_percent': bb_result['distance_percent'],
+                'warning_level': bb_result['warning_level'],
+                'bb_upper': bb_result['bb_upper'],
+                'bb_middle': bb_result['bb_middle'],
+                'bb_lower': bb_result['bb_lower'],
+                'lookback_high': bb_result['lookback_high'],
+                'lookback_low': bb_result['lookback_low']
+            },
+            'validity': validity_result,
+            'volatility': volatility_result
         })
     
     except Exception as e:
         logger.error(f'預測錯誤: {e}', exc_info=True)
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/predict_batch', methods=['POST'])
-def predict_batch():
-    """
-    批量預測多個幣種
-    """
-    try:
-        data = request.get_json()
-        symbols = data.get('symbols', SYMBOLS)
-        timeframe = data.get('timeframe', '15m')
-        ohlcv_data = data.get('ohlcv_data', {})
-        
-        results = []
-        for symbol in symbols:
-            if symbol not in ohlcv_data:
-                continue
-            
-            result = bb_calculator.analyze_approaching(symbol, timeframe, ohlcv_data[symbol])
-            
-            results.append({
-                'symbol': symbol,
-                'timeframe': timeframe,
-                'bb_touch': {
-                    'approaching': result['approaching'],
-                    'direction': result['direction'],
-                    'distance_percent': result['distance_percent'],
-                    'warning_level': result['warning_level'],
-                    'bb_upper': result['bb_upper'],
-                    'bb_middle': result['bb_middle'],
-                    'bb_lower': result['bb_lower']
-                }
-            })
-        
-        return jsonify({
-            'timestamp': datetime.now().isoformat(),
-            'results': results,
-            'count': len(results)
-        })
-    
-    except Exception as e:
-        logger.error(f'批量預測錯誤: {e}', exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -329,11 +439,11 @@ if __name__ == '__main__':
         logger.info('=' * 60)
         logger.info('BB 反彈實時監控系統 V5 (簡化版)')
         logger.info('=' * 60)
-        logger.info('功能：')
+        logger.info('流程：')
         logger.info('  1. 直接計算 BB 通道')
-        logger.info('  2. 檢測 K 棒高低點接近程度')
-        logger.info('  3. 三級警告系統 (danger/warning/caution)')
-        logger.info('  4. 無需機器學習模型')
+        logger.info('  2. 檢測接近/接觸')
+        logger.info('  3. 只有接近/接觸時才調用模型')
+        logger.info('  4. 調用有效性 + 波動性模型')
         logger.info('=' * 60)
         
         logger.info(f'部署地址: 0.0.0.0:5000')
