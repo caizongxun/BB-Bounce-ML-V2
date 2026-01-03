@@ -206,16 +206,6 @@
             transform: translateY(-2px);
         }
 
-        .btn-secondary {
-            background: rgba(0, 188, 212, 0.1);
-            color: #00bcd4;
-            border: 1px solid #00bcd4;
-        }
-
-        .btn-secondary:hover {
-            background: rgba(0, 188, 212, 0.2);
-        }
-
         .detail-panel {
             background: rgba(20, 20, 20, 0.6);
             border: 1px solid rgba(0, 188, 212, 0.15);
@@ -253,53 +243,53 @@
             word-break: break-all;
         }
 
-        .detail-value.positive {
-            color: #4caf50;
-        }
-
-        .detail-value.negative {
-            color: #f44336;
-        }
-
-        .detail-value.warning {
-            color: #ffc107;
-        }
-
-        /* 接近程度段 - 關鈕 */
+        /* 接近程度段 - 一直顯示 */
         .approaching-section {
             background: rgba(30, 30, 30, 0.6);
-            border: 3px solid #ff6b6b;
+            border: 3px solid #00bcd4;
             border-radius: 10px;
             padding: 25px;
             margin-top: 30px;
-            box-shadow: 0 0 20px rgba(255, 107, 107, 0.2);
+            box-shadow: 0 0 15px rgba(0, 188, 212, 0.15);
         }
 
-        .approaching-section.upper {
+        .approaching-section.danger {
             border-color: #f44336;
-            box-shadow: 0 0 20px rgba(244, 67, 54, 0.3);
+            box-shadow: 0 0 25px rgba(244, 67, 54, 0.4);
+            background: rgba(244, 67, 54, 0.05);
         }
 
-        .approaching-section.lower {
+        .approaching-section.warning {
+            border-color: #ffc107;
+            box-shadow: 0 0 20px rgba(255, 193, 7, 0.3);
+            background: rgba(255, 193, 7, 0.05);
+        }
+
+        .approaching-section.safe {
             border-color: #4caf50;
-            box-shadow: 0 0 20px rgba(76, 175, 80, 0.3);
+            box-shadow: 0 0 15px rgba(76, 175, 80, 0.2);
+            background: rgba(76, 175, 80, 0.05);
         }
 
         .approaching-title {
             font-size: 18px;
             font-weight: 700;
-            color: #ff6b6b;
+            color: #00bcd4;
             margin-bottom: 20px;
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
-        .approaching-section.upper .approaching-title {
+        .approaching-section.danger .approaching-title {
             color: #f44336;
         }
 
-        .approaching-section.lower .approaching-title {
+        .approaching-section.warning .approaching-title {
+            color: #ffc107;
+        }
+
+        .approaching-section.safe .approaching-title {
             color: #4caf50;
         }
 
@@ -311,17 +301,17 @@
 
         .approaching-item {
             background: rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(255, 107, 107, 0.3);
+            border: 1px solid rgba(0, 188, 212, 0.2);
             border-radius: 8px;
             padding: 20px;
         }
 
-        .approaching-section.upper .approaching-item {
+        .approaching-section.danger .approaching-item {
             border-color: rgba(244, 67, 54, 0.3);
         }
 
-        .approaching-section.lower .approaching-item {
-            border-color: rgba(76, 175, 80, 0.3);
+        .approaching-section.warning .approaching-item {
+            border-color: rgba(255, 193, 7, 0.3);
         }
 
         .approaching-label {
@@ -337,13 +327,18 @@
             font-weight: 700;
             font-family: 'Courier New', monospace;
             margin-bottom: 8px;
+            color: #00bcd4;
         }
 
-        .approaching-section.upper .approaching-value {
+        .approaching-section.danger .approaching-value {
             color: #f44336;
         }
 
-        .approaching-section.lower .approaching-value {
+        .approaching-section.warning .approaching-value {
+            color: #ffc107;
+        }
+
+        .approaching-section.safe .approaching-value {
             color: #4caf50;
         }
 
@@ -359,7 +354,7 @@
         .progress-bar-fill {
             background: linear-gradient(90deg, #4caf50, #81c784);
             height: 100%;
-            transition: width 0.3s ease;
+            transition: width 0.5s ease;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -368,17 +363,17 @@
             font-weight: 700;
         }
 
-        .approaching-section.upper .progress-bar-fill {
+        .approaching-section.danger .progress-bar-fill {
             background: linear-gradient(90deg, #f44336, #ef5350);
+            box-shadow: inset 0 0 10px rgba(255, 23, 68, 0.5), 0 0 15px rgba(244, 67, 54, 0.5);
         }
 
-        .approaching-section.lower .progress-bar-fill {
+        .approaching-section.warning .progress-bar-fill {
+            background: linear-gradient(90deg, #ffc107, #ffb300);
+        }
+
+        .approaching-section.safe .progress-bar-fill {
             background: linear-gradient(90deg, #4caf50, #81c784);
-        }
-
-        .progress-bar-fill.danger {
-            background: linear-gradient(90deg, #ff5252, #ff1744) !important;
-            box-shadow: inset 0 0 10px rgba(255, 23, 68, 0.5);
         }
 
         /* 所有幣種網格 */
@@ -417,11 +412,6 @@
             box-shadow: 0 0 15px rgba(255, 193, 7, 0.2);
         }
 
-        .symbol-card.safe {
-            border-color: #4caf50;
-            box-shadow: 0 0 15px rgba(76, 175, 80, 0.2);
-        }
-
         .symbol-name {
             font-size: 16px;
             font-weight: 700;
@@ -449,11 +439,6 @@
         .symbol-card.warning .symbol-status {
             background: rgba(255, 193, 7, 0.15);
             color: #ffb300;
-        }
-
-        .symbol-card.safe .symbol-status {
-            background: rgba(76, 175, 80, 0.15);
-            color: #81c784;
         }
 
         .symbol-info {
@@ -686,7 +671,6 @@
 
                     <div class="button-group">
                         <button class="btn btn-primary" onclick="updateDetailedAnalysis()">🔍 立即分析</button>
-                        <button class="btn btn-secondary" onclick="toggleAutoUpdate()">自動更新: <span id="auto-status">開啟</span></button>
                     </div>
                 </div>
 
@@ -703,8 +687,8 @@
         <div class="tab-content">
             <div class="detail-section">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
-                    <h2 style="color: #00bcd4;">所有幣種監控面板 (每分鐘更新)</h2>
-                    <button class="btn btn-secondary" onclick="updateAllSymbols()">🔁 手動刷新</button>
+                    <h2 style="color: #00bcd4;">所有幣種監控面板 (每 5 秒更新)</h2>
+                    <button class="btn-primary" style="padding: 8px 16px; border: none; background: linear-gradient(135deg, #00bcd4, #4dd0e1); color: #0f0f0f; border-radius: 6px; cursor: pointer;" onclick="updateAllSymbols()">🔁 手動刷新</button>
                 </div>
 
                 <div id="symbols-container" class="symbols-grid">
@@ -738,10 +722,9 @@
             'ALGOUSDT', 'NEARUSDT', 'BCHUSDT', 'ETCUSDT'
         ];
 
-        let autoUpdateEnabled = true;
+        let debugLogs = [];
         let detailInterval = null;
         let allSymbolsInterval = null;
-        let debugLogs = [];
 
         // 逡診日誌
         function addDebugLog(message, type = 'info') {
@@ -778,12 +761,11 @@
                         close: parseFloat(kline[4]),
                         volume: parseFloat(kline[7])
                     };
-                    addDebugLog(`[Binance] ${symbol}: O=${ohlcv.open.toFixed(2)} H=${ohlcv.high.toFixed(2)} L=${ohlcv.low.toFixed(2)} C=${ohlcv.close.toFixed(2)}`, 'success');
                     return ohlcv;
                 }
                 return null;
             } catch (error) {
-                addDebugLog(`[Binance] ${symbol} 取得失败: ${error.message}`, 'error');
+                addDebugLog(`[Binance] ${symbol} 取得失效: ${error.message}`, 'error');
                 return null;
             }
         }
@@ -796,10 +778,8 @@
             document.querySelectorAll('.tab-button')[tabIndex].classList.add('active');
 
             if (tabIndex === 0) {
-                addDebugLog('[分析] 切換到詳細分析', 'info');
                 startDetailUpdate();
             } else {
-                addDebugLog('[所有] 切換到所有幣種監控', 'info');
                 stopDetailUpdate();
                 updateAllSymbols();
                 startAllSymbolsUpdate();
@@ -839,7 +819,7 @@
                 addDebugLog(`[API] 返回成功`, 'success');
                 
                 const bb = data.bb_touch;
-                addDebugLog(`[BB] direction=${bb.direction}, distance=${bb.distance_percent.toFixed(3)}%, warning=${bb.warning_level}`, 'info');
+                addDebugLog(`[BB] status=${bb.status}, direction=${bb.direction}, distance=${bb.distance_percent.toFixed(3)}%`, 'info');
                 
                 container.innerHTML = renderDetailPanel(data, symbol, timeframe, ohlcv);
                 updateTimestamp();
@@ -851,50 +831,60 @@
 
         function renderDetailPanel(data, symbol, timeframe, ohlcv) {
             const bb = data.bb_touch;
+            const status = bb.status || 'normal';
             const direction = bb.direction;
-            const distance = bb.distance_percent;
-            const warning = bb.warning_level;
+            const distance = bb.distance_percent || 0;
+            const warning = bb.warning_level || 'none';
 
-            let approachingHTML = '';
-            if (direction) {
-                const sectionClass = direction === 'upper' ? 'upper' : 'lower';
-                const directionText = direction === 'upper' ? '上軌' : '下軌';
-                const directionEmoji = direction === 'upper' ? '⬆️' : '⬇️';
-                
-                let warningText = '';
-                let barClass = '';
-                if (warning === 'danger') {
-                    warningText = '🚨 灾難等級! 非常接近!';
-                    barClass = 'danger';
-                } else if (warning === 'warning') {
-                    warningText = '⚠️ 警告等級 - 接近中';
-                } else if (warning === 'caution') {
-                    warningText = '⛳ 注意 - 輹族訊号出珱';
-                }
-                
-                const fillPercent = Math.min((distance / 2) * 100, 100);
-                
-                approachingHTML = `
-                    <div class="approaching-section ${sectionClass}">
-                        <div class="approaching-title">${directionEmoji} 接近 BB ${directionText}軌道</div>
-                        <div class="approaching-grid">
-                            <div class="approaching-item">
-                                <div class="approaching-label">警告等級</div>
-                                <div class="approaching-value" style="font-size: 16px;">${warningText}</div>
-                            </div>
-                            <div class="approaching-item">
-                                <div class="approaching-label">距離 BB 軌 (%)</div>
-                                <div class="approaching-value">${distance.toFixed(3)}%</div>
-                                <div class="progress-bar-container">
-                                    <div class="progress-bar-fill ${barClass}" style="width: ${fillPercent}%;">
-                                        ${distance.toFixed(2)}%
-                                    </div>
+            let sectionClass = 'safe';
+            if (warning === 'danger') sectionClass = 'danger';
+            else if (warning === 'warning') sectionClass = 'warning';
+            else if (warning === 'caution') sectionClass = 'warning';
+
+            let statusText = '正常';
+            let directionEmoji = '';
+            if (status === 'touched') {
+                statusText = '🚨 已接觸!';
+                directionEmoji = direction === 'upper' ? '⬆️ 上' : '⬇️ 下';
+            } else if (status === 'approaching') {
+                statusText = '⚠️ 接近中';
+                directionEmoji = direction === 'upper' ? '⬆️ 上' : '⬇️ 下';
+            } else {
+                statusText = '✅ 安全';
+            }
+            
+            const fillPercent = Math.min((distance / 0.5) * 100, 100);
+            const warningTextMap = {
+                'danger': '🚨 灾難! 上活推職接觸!',
+                'warning': '⚠️ 警告 - 非常接近',
+                'caution': '⛳ 注意 - 輹族訊号',
+                'none': '✅ 安全'
+            };
+
+            const approachingHTML = `
+                <div class="approaching-section ${sectionClass}">
+                    <div class="approaching-title">📈 當前接近程度</div>
+                    <div class="approaching-grid">
+                        <div class="approaching-item">
+                            <div class="approaching-label">方向</div>
+                            <div class="approaching-value" style="font-size: 18px;">${direction ? directionEmoji : '— 正常'}</div>
+                            <div class="approaching-label" style="margin-top: 12px;">狀態</div>
+                            <div class="approaching-value" style="font-size: 16px;">${statusText}</div>
+                        </div>
+                        <div class="approaching-item">
+                            <div class="approaching-label">距離 (%)</div>
+                            <div class="approaching-value">${distance.toFixed(3)}%</div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar-fill" style="width: ${fillPercent}%;">
+                                    ${distance.toFixed(2)}%
                                 </div>
                             </div>
+                            <div class="approaching-label" style="margin-top: 12px;">警告等級</div>
+                            <div class="approaching-value" style="font-size: 14px;">${warningTextMap[warning]}</div>
                         </div>
                     </div>
-                `;
-            }
+                </div>
+            `;
 
             return `
                 <div class="detail-grid">
@@ -954,11 +944,11 @@
                     const data = await response.json();
                     const card = renderSymbolCard(data, symbol, ohlcv);
                     html += card.html;
-                    if (card.approaching) approaching_count++;
+                    if (card.critical) approaching_count++;
                 }
                 
                 container.innerHTML = html || '<div class="empty-state"><div class="empty-state-title">❌ 沒有數据</div></div>';
-                addDebugLog(`[所有] 完成! 找到 ${approaching_count} 個接近磊情。`, 'success');
+                addDebugLog(`[所有] 完成! 找到 ${approaching_count} 個危險磊情。`, 'success');
                 updateTimestamp();
             } catch (error) {
                 addDebugLog(`[錯誤] ${error.message}`, 'error');
@@ -967,28 +957,23 @@
 
         function renderSymbolCard(data, symbol, ohlcv) {
             const bb = data.bb_touch;
+            const status = bb.status || 'normal';
             const direction = bb.direction;
-            const distance = bb.distance_percent;
-            const warning = bb.warning_level;
+            const distance = bb.distance_percent || 0;
+            const warning = bb.warning_level || 'none';
             
             let cardClass = 'symbol-card';
-            let statusText = '正常';
-            let isApproaching = false;
+            let statusText = '✅ 正常';
+            let isCritical = false;
             
             if (warning === 'danger') {
                 cardClass += ' danger';
                 statusText = '🚨 危險!';
-                isApproaching = true;
+                isCritical = true;
             } else if (warning === 'warning') {
                 cardClass += ' warning';
                 statusText = '⚠️ 警告';
-                isApproaching = true;
-            } else if (warning === 'caution') {
-                cardClass += ' warning';
-                statusText = '⛳ 注意';
-            } else {
-                cardClass += ' safe';
-                statusText = '✅ 安全';
+                isCritical = true;
             }
             
             const now = new Date().toLocaleTimeString('zh-TW', { hour12: false });
@@ -1001,12 +986,12 @@
                     </div>
                     <div class="symbol-info">
                         <div class="symbol-metric">
-                            <div class="symbol-metric-label">距離度</div>
+                            <div class="symbol-metric-label">距離 (%)</div>
                             <div class="symbol-metric-value">${distance.toFixed(3)}%</div>
                         </div>
                         <div class="symbol-metric">
                             <div class="symbol-metric-label">方向</div>
-                            <div class="symbol-metric-value">${direction ? (direction === 'upper' ? '⬆️上' : '⬇️下') : '—'}</div>
+                            <div class="symbol-metric-value">${direction ? (direction === 'upper' ? '⬆️' : '⬇️') : '—'}</div>
                         </div>
                     </div>
             `;
@@ -1039,7 +1024,7 @@
                 </div>
             `;
             
-            return { html: html, approaching: isApproaching };
+            return { html: html, critical: isCritical };
         }
 
         function updateTimestamp() {
@@ -1047,18 +1032,12 @@
             document.getElementById('last-update').textContent = `最後更新: ${now}`;
         }
 
-        function toggleAutoUpdate() {
-            autoUpdateEnabled = !autoUpdateEnabled;
-            document.getElementById('auto-status').textContent = autoUpdateEnabled ? '開啟' : '關閉';
-            if (autoUpdateEnabled) startDetailUpdate();
-            else stopDetailUpdate();
-        }
-
         function startDetailUpdate() {
             if (detailInterval) clearInterval(detailInterval);
+            updateDetailedAnalysis();  // 需立即更新一次
             detailInterval = setInterval(() => {
-                if (autoUpdateEnabled) updateDetailedAnalysis();
-            }, 1000);
+                updateDetailedAnalysis();
+            }, 5000);  // 5秒更新一次，沒有闪爆
         }
 
         function stopDetailUpdate() {
@@ -1067,14 +1046,14 @@
 
         function startAllSymbolsUpdate() {
             if (allSymbolsInterval) clearInterval(allSymbolsInterval);
+            updateAllSymbols();  // 需立即更新一次
             allSymbolsInterval = setInterval(() => {
                 updateAllSymbols();
-            }, 60000);
+            }, 5000);  // 5秒更新一次
         }
 
         window.addEventListener('load', () => {
             addDebugLog('[起動] 頁面已加載', 'success');
-            updateDetailedAnalysis();
             startDetailUpdate();
         });
 
