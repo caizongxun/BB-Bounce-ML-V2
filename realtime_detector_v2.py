@@ -61,31 +61,101 @@ class RealtimeBBDetectorV2:
         self._load_models()
 
     def _load_models(self):
-        """從 models 目錄加載所有分類器和有效性模型"""
+        """從 models 目錄加載所有分類器和有效性模型
+        
+        支援的目錄結構:
+        1. 簡單結構: models/SYMBOL_bb_classifier.pkl
+        2. 嵌套結構: models/bb_models/SYMBOL/15m/model.pkl
+        3. 嵌套結構: models/validity_models/SYMBOL/15m/validity_model.pkl
+        """
         if not os.path.exists(self.model_dir):
             print(f"[RealtimeBBDetectorV2] Warning: models dir not found: {self.model_dir}")
             return
         
         for sym in self.symbols:
-            # 分類器模型 (層級1)
-            classifier_path = os.path.join(self.model_dir, f"{sym}_bb_classifier.pkl")
-            if os.path.exists(classifier_path):
-                try:
-                    with open(classifier_path, "rb") as f:
-                        self.classifiers[sym] = pickle.load(f)
-                    print(f"[RealtimeBBDetectorV2] Loaded classifier for {sym}")
-                except Exception as e:
-                    print(f"[RealtimeBBDetectorV2] Failed to load classifier for {sym}: {e}")
+            # ===== 分類器模型 (層級1) =====
+            classifier_loaded = False
             
-            # 有效性模型 (層級2)
-            validity_path = os.path.join(self.model_dir, f"{sym}_validity_model.pkl")
-            if os.path.exists(validity_path):
+            # 方案1: 簡單結構 models/SYMBOL_bb_classifier.pkl
+            classifier_path_simple = os.path.join(self.model_dir, f"{sym}_bb_classifier.pkl")
+            if os.path.exists(classifier_path_simple):
                 try:
-                    with open(validity_path, "rb") as f:
-                        self.validity_models[sym] = pickle.load(f)
-                    print(f"[RealtimeBBDetectorV2] Loaded validity model for {sym}")
+                    with open(classifier_path_simple, "rb") as f:
+                        self.classifiers[sym] = pickle.load(f)
+                    print(f"[RealtimeBBDetectorV2] Loaded classifier for {sym} (simple path)")
+                    classifier_loaded = True
                 except Exception as e:
-                    print(f"[RealtimeBBDetectorV2] Failed to load validity model for {sym}: {e}")
+                    print(f"[RealtimeBBDetectorV2] Failed to load classifier from simple path for {sym}: {e}")
+            
+            # 方案2: 嵌套結構 models/bb_models/SYMBOL/15m/model.pkl
+            if not classifier_loaded:
+                classifier_path_nested = os.path.join(
+                    self.model_dir, "bb_models", sym, "15m", "model.pkl"
+                )
+                if os.path.exists(classifier_path_nested):
+                    try:
+                        with open(classifier_path_nested, "rb") as f:
+                            self.classifiers[sym] = pickle.load(f)
+                        print(f"[RealtimeBBDetectorV2] Loaded classifier for {sym} (nested 15m path)")
+                        classifier_loaded = True
+                    except Exception as e:
+                        print(f"[RealtimeBBDetectorV2] Failed to load classifier from nested 15m path for {sym}: {e}")
+            
+            # 方案3: 嵌套結構 models/bb_models/SYMBOL/1h/model.pkl (備用)
+            if not classifier_loaded:
+                classifier_path_nested_1h = os.path.join(
+                    self.model_dir, "bb_models", sym, "1h", "model.pkl"
+                )
+                if os.path.exists(classifier_path_nested_1h):
+                    try:
+                        with open(classifier_path_nested_1h, "rb") as f:
+                            self.classifiers[sym] = pickle.load(f)
+                        print(f"[RealtimeBBDetectorV2] Loaded classifier for {sym} (nested 1h path)")
+                        classifier_loaded = True
+                    except Exception as e:
+                        print(f"[RealtimeBBDetectorV2] Failed to load classifier from nested 1h path for {sym}: {e}")
+            
+            # ===== 有效性模型 (層級2) =====
+            validity_loaded = False
+            
+            # 方案1: 簡單結構 models/SYMBOL_validity_model.pkl
+            validity_path_simple = os.path.join(self.model_dir, f"{sym}_validity_model.pkl")
+            if os.path.exists(validity_path_simple):
+                try:
+                    with open(validity_path_simple, "rb") as f:
+                        self.validity_models[sym] = pickle.load(f)
+                    print(f"[RealtimeBBDetectorV2] Loaded validity model for {sym} (simple path)")
+                    validity_loaded = True
+                except Exception as e:
+                    print(f"[RealtimeBBDetectorV2] Failed to load validity model from simple path for {sym}: {e}")
+            
+            # 方案2: 嵌套結構 models/validity_models/SYMBOL/15m/validity_model.pkl
+            if not validity_loaded:
+                validity_path_nested = os.path.join(
+                    self.model_dir, "validity_models", sym, "15m", "validity_model.pkl"
+                )
+                if os.path.exists(validity_path_nested):
+                    try:
+                        with open(validity_path_nested, "rb") as f:
+                            self.validity_models[sym] = pickle.load(f)
+                        print(f"[RealtimeBBDetectorV2] Loaded validity model for {sym} (nested 15m path)")
+                        validity_loaded = True
+                    except Exception as e:
+                        print(f"[RealtimeBBDetectorV2] Failed to load validity model from nested 15m path for {sym}: {e}")
+            
+            # 方案3: 嵌套結構 models/validity_models/SYMBOL/1h/validity_model.pkl (備用)
+            if not validity_loaded:
+                validity_path_nested_1h = os.path.join(
+                    self.model_dir, "validity_models", sym, "1h", "validity_model.pkl"
+                )
+                if os.path.exists(validity_path_nested_1h):
+                    try:
+                        with open(validity_path_nested_1h, "rb") as f:
+                            self.validity_models[sym] = pickle.load(f)
+                        print(f"[RealtimeBBDetectorV2] Loaded validity model for {sym} (nested 1h path)")
+                        validity_loaded = True
+                    except Exception as e:
+                        print(f"[RealtimeBBDetectorV2] Failed to load validity model from nested 1h path for {sym}: {e}")
 
     def add_candle(self, symbol: str, candle: Dict):
         """
