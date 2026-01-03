@@ -6,11 +6,11 @@ BB反彈ML系統 - 實時服務 V3 (修載第十輫修載+接近提示)
 1. pickle/joblib 序列化不一致問題
 2. BB 模型特徵數量不匹配 (16 -> 12)
 3. 波動性模型特徵數量不匹配 (3 -> 15)
-4. BB 觸厬位置分類邘測邏輯 (「觸厬是但位置未知」矛盾)
+4. BB 觸厬位置分類邘測邏輫邏輫
 5. JSON 序列化錯誤 - label_map 鍵型別混合
 6. label_map 映射錯誤 - 數字映射到數字而不是文字
-7. 觸厬檢測邏輯 - 只檢測當下 K 棒，不檢測歷史數據
-8. 波動性預測整合到信號生成邏輯
+7. 觸厬檢測邏輫 - 只檢測當下 K 棒，不檢測歷史數據
+8. 波動性預測整合到信號生成邏輫
 9. 接近 BB 纱線提示功能
 """
 
@@ -59,7 +59,7 @@ SYMBOLS = [
 TIMEFRAMES = ['15m', '1h']
 
 # 接近提示门囕
- APPROACHING_THRESHOLD = 0.02  # 2% 接近门囕
+APPROACHING_THRESHOLD = 0.02  # 2% 接近门囕
 WARNING_THRESHOLD = 0.05      # 5% 警告门囕
 
 # ============================================================
@@ -477,7 +477,7 @@ def normalize_label_map(label_map):
             if isinstance(v, str):
                 v_str = v
             elif isinstance(v, (int, np.integer)):
-                # 判斷是否是整數，然後轉換為標籤
+                # 判斷是否是整数，然後轉換為標籤
                 v_map = {0: 'lower', 1: 'none', 2: 'upper'}
                 v_str = v_map.get(int(v), f'class_{v}')
             else:
