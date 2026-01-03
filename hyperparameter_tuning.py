@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-自動超參數調整器
+自動超參数調整器
 
-澄洅辛苦的網格搜索，為每個幣種時框找到最优的超參數配置
+澄洅辛苦的网格搜索，為每个币种找到最优的超參数配置
 
 使用 Optuna 或普通 grid search
 """
@@ -38,17 +38,17 @@ except ImportError:
 try:
     from data_loader import CryptoDataLoader
 except ImportError:
-    logger.error('找不到 data_loader')
+    logger.error('找不到 data_loader，請確保在正確的目錄')
     exit(1)
 
 from train_bb_band_contraction_model_v2_optimized import BBContractionFeatureExtractorV3
 
 # ============================================================
-# 超參數調整器
+# 超參数調整器
 # ============================================================
 
 class HyperparameterTuner:
-    """為模型找最优的超參數"""
+    """為模型找最优的超參数"""
     
     def __init__(self, output_dir='hyperparameter_tuning'):
         self.output_dir = Path(output_dir)
@@ -60,12 +60,12 @@ class HyperparameterTuner:
         """渆敶訓練數據"""
         logger.info(f'渆敶 {symbol} {timeframe} 數據...')
         
-        # 下載數據
+        # 下載数据
         df = self.loader.download_symbol_data(symbol, timeframe)
         if df is None or len(df) < 100:
             return None, None, None, None
         
-        # 提取特徵
+        # 提取特征
         extractor = BBContractionFeatureExtractorV3()
         df = extractor.create_features(df, timeframe=timeframe, lookahead=5)
         
@@ -75,7 +75,7 @@ class HyperparameterTuner:
         if len(df_labeled) < 50:
             return None, None, None, None
         
-        # 特徵選擇
+        # 特征選擇
         feature_cols = [
             'bb_width_change_1bar', 'bb_width_change_2bar', 'bb_width_change_3bar', 'bb_width_change_5bar',
             'bb_width_percentile', 'std_change', 'std_change_3bar',
@@ -92,6 +92,27 @@ class HyperparameterTuner:
         mask = ~X.isna().any(axis=1)
         X = X[mask]
         y = y[mask]
+        
+        # ========================================
+        # 新增：清理無穷大值和 NaN
+        # ========================================
+        
+        # 替換無穷大
+        X = X.replace([np.inf, -np.inf], np.nan)
+        
+        # 替換超大值 (> 1e10)
+        X = X.clip(-1e10, 1e10)
+        
+        # 處理亮照的 NaN
+        X = X.fillna(X.median())
+        
+        # 最侌情況：如果還有 NaN，就用 0 填充
+        X = X.fillna(0)
+        
+        # 會檢查是否還有 NaN 或一日無穷大
+        if X.isna().any().any() or np.isinf(X).any().any():
+            logger.warning(f'{symbol} {timeframe}: 數據中享有 NaN 或一日無穷大，跳過')
+            return None, None, None, None
         
         if len(X) < 30:
             return None, None, None, None
@@ -123,21 +144,21 @@ class HyperparameterTuner:
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
         
-        # 优化目標：精準度 + 召回率
-        # (交易上最重要的是精準度)
+        # 优化目標：精准度 + 召回率
+        # (交易上最重要的是精准度)
         precision = precision_score(y_test, y_pred, zero_division=0)
         recall = recall_score(y_test, y_pred, zero_division=0)
         
-        # 权重：70% 精準度 + 30% 召回率
+        # 权重：70% 精准度 + 30% 召回率
         score = 0.7 * precision + 0.3 * recall
         
         return score
     
     def tune_optuna(self, symbol: str, timeframe: str, n_trials=50):
-        """使用 Optuna 進行超參數調整"""
-        logger.info(f'使用 Optuna 檢查超參數...')
+        """使用 Optuna 進行超參数調整"""
+        logger.info(f'使用 Optuna 檢查超參数...')
         
-        # 渆敶數據
+        # 渆整數据
         X, y, feature_cols, df = self.prepare_data(symbol, timeframe)
         if X is None:
             logger.error(f'{symbol} {timeframe} 数据不足')
@@ -166,7 +187,7 @@ class HyperparameterTuner:
         sampler = optuna.samplers.TPESampler(seed=42)
         study = optuna.create_study(sampler=sampler, direction='maximize')
         
-        # 定義目標函数
+        # 定义目標函数
         def objective(trial):
             return self.objective_optuna(trial, X_train, y_train, X_test, y_test)
         
@@ -180,7 +201,7 @@ class HyperparameterTuner:
         best_score = best_trial.value
         
         logger.info(f'最优超參数：{best_params}')
-        logger.info(f'最优分數：{best_score:.4f}')
+        logger.info(f'最优分数：{best_score:.4f}')
         
         return best_params, best_score, study
     
@@ -188,7 +209,7 @@ class HyperparameterTuner:
         """使用 Grid Search 進行超參数調整 (当 Optuna 不可用時)"""
         logger.info(f'使用 Grid Search 檢查超參数...')
         
-        # 渆整數据
+        # 渆整数据
         X, y, feature_cols, df = self.prepare_data(symbol, timeframe)
         if X is None:
             logger.error(f'{symbol} {timeframe} 数据不足')
