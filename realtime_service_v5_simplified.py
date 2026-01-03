@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 """
-BB反彈ML系統 - 實時服務 V5 (簡化版)
-直接計算 BB 通道 - 不再依賴內存 history
-使用 Binance 完整歷史數據來計算 BB
-
-改進：使用上一根完全形成的K棒做預測，避免預測閃爍
-完整特椅提取：提取完整的17個特椅，與訓練模型一致
+BB反彈ML系統 - 實時服務 V5 (正式版)
+提取完整 17 個特徵符合訓練模型的需求
+修複 ATR 計算的 numpy 形狀不匹配問題
 """
 
 import numpy as np
@@ -20,6 +17,7 @@ import joblib
 import pickle
 import requests
 from functools import lru_cache
+import traceback
 
 warnings.filterwarnings('ignore')
 
@@ -65,29 +63,20 @@ MODELS_DIR = Path('./models')
 # ============================================================
 
 class PredictionStrategy:
-    """
-    預測策略選擇器
-    LATEST_INCOMPLETE: 使用最新K棒（即使未閉合）- 最敏感但有閃爍
-    PREVIOUS_COMPLETE: 使用上一根完全K棒 - 穩定但延遲一根
-    SMOOTHED: 混合策略 - 平衡敏感度和穩定性
-    """
-    LATEST_INCOMPLETE = 'latest'      # 實時敏感
-    PREVIOUS_COMPLETE = 'previous'    # 穩定可靠
-    SMOOTHED = 'smoothed'             # 平衡
+    LATEST_INCOMPLETE = 'latest'
+    PREVIOUS_COMPLETE = 'previous'
+    SMOOTHED = 'smoothed'
 
-# 當前使用的策略（推薦用 PREVIOUS_COMPLETE）
 CURRENT_STRATEGY = PredictionStrategy.PREVIOUS_COMPLETE
 
 # ============================================================
-# BB 計算器 - 使用 Binance 完整歷史數據
+# BB 計算器
 # ============================================================
 
 class BBCalculator:
-    """使用 Binance 完整歷史數據計算 BB 通道"""
     
     @staticmethod
     def fetch_historical_closes(symbol, timeframe, limit=100):
-        """從 Binance 獲取完整歷史收盤價"""
         try:
             url = f"{BINANCE_API}/klines"
             params = {
@@ -100,46 +89,40 @@ class BBCalculator:
                 klines = response.json()
                 closes = np.array([float(k[4]) for k in klines])
                 
-                # 同時近回完整K棒信息，用於K棒閉合檢測
                 klines_data = [{
                     'open': float(k[1]),
                     'high': float(k[2]),
                     'low': float(k[3]),
                     'close': float(k[4]),
                     'volume': float(k[7]),
-                    'close_time': int(k[6])  # K棒閉合時間
+                    'close_time': int(k[6])
                 } for k in klines]
                 
                 return closes, klines_data
         except Exception as e:
-            logger.warning(f'[Binance] 獲取歷史數據失敗: {symbol} {timeframe} - {e}')
+            logger.warning(f'[Binance] 獲取歷史數據失敖: {symbol} {timeframe} - {e}')
         return None, None
     
     @staticmethod
     def is_kline_closed(kline_close_time, current_time):
-        """檢測K棒是否已閉合"""
         return current_time >= kline_close_time
     
     @staticmethod
     def calculate_bb(symbol, timeframe, strategy=PredictionStrategy.PREVIOUS_COMPLETE):
-        """計算 BB 通道值"""
         closes, klines_data = BBCalculator.fetch_historical_closes(symbol, timeframe, limit=100)
         if closes is None or len(closes) < BB_PERIOD:
             actual_length = len(closes) if closes is not None else 0
-            logger.warning(f'[BB計算] {symbol} {timeframe}: 數據不足 (只有 {actual_length} 根，需要 {BB_PERIOD} 根)')
+            logger.warning(f'[BB計算] {symbol} {timeframe}: 數據不足')
             return None, None, None, None, None
         
-        # 根據策略選擇用哪根K棍
         if strategy == PredictionStrategy.PREVIOUS_COMPLETE:
             prediction_kline = klines_data[-2] if len(klines_data) >= 2 else klines_data[-1]
             kline_status = 'CLOSED'
-            logger.info(f'[K棒選擇] {symbol} {timeframe}: 使用上一根完全K棍 (已閉合)')
         else:
             prediction_kline = klines_data[-1]
             current_time_ms = datetime.now().timestamp() * 1000
             is_closed = BBCalculator.is_kline_closed(prediction_kline['close_time'], current_time_ms)
             kline_status = 'CLOSED' if is_closed else 'FORMING'
-            logger.info(f'[K棒選擇] {symbol} {timeframe}: 使用最新K棍 (狀態={kline_status})')
         
         recent_closes = closes[-BB_PERIOD:]
         sma = np.mean(recent_closes)
@@ -148,15 +131,11 @@ class BBCalculator:
         lower = sma - BB_STD * std
         
         logger.info(f'[BB計算] {symbol} {timeframe}: 上={upper:.2f}, 中={sma:.2f}, 下={lower:.2f}')
-        logger.info(f'[預測K棍] {symbol} {timeframe}: close={prediction_kline["close"]:.2f}, high={prediction_kline["high"]:.2f}, low={prediction_kline["low"]:.2f}')
         
         return float(upper), float(sma), float(lower), prediction_kline, kline_status
     
     @staticmethod
     def analyze_bb_status(symbol, timeframe, strategy=PredictionStrategy.PREVIOUS_COMPLETE):
-        """
-        分析 K 棍是否接近/接觸 BB 軌道
-        """
         bb_upper, bb_middle, bb_lower, prediction_kline, kline_status = BBCalculator.calculate_bb(
             symbol, timeframe, strategy=strategy
         )
@@ -195,8 +174,6 @@ class BBCalculator:
         
         dist_to_upper = (bb_upper - pred_high) / bb_upper if bb_upper > 0 else 1.0
         dist_to_lower = (pred_low - bb_lower) / bb_lower if bb_lower > 0 else 1.0
-        
-        logger.info(f'[距離] {symbol} {timeframe}: 上={dist_to_upper*100:.8f}%, 下={dist_to_lower*100:.8f}%')
         
         # 判斷狀態
         status = 'normal'
@@ -259,15 +236,13 @@ class BBCalculator:
         }
 
 # ============================================================
-# 完整特椅提取器 - 17個特椅
+# 完整特徵提取器
 # ============================================================
 
 class CompleteFeatureExtractor:
-    """提取完整的17個特椅符合訓練模型"""
     
     @staticmethod
     def calculate_indicators(closes, highs, lows, volumes):
-        """計算基本指標"""
         # BB
         sma = np.mean(closes[-BB_PERIOD:])
         std = np.std(closes[-BB_PERIOD:])
@@ -283,14 +258,20 @@ class CompleteFeatureExtractor:
         rs = gains / (losses + 1e-8)
         rsi = 100 - (100 / (1 + rs))
         
-        # ATR
-        tr1 = highs[-14:] - lows[-14:]
-        tr2 = np.abs(highs[-14:] - closes[-14:][:-1] if len(closes) > 1 else 0)
-        tr3 = np.abs(lows[-14:] - closes[-14:][:-1] if len(closes) > 1 else 0)
-        atr = np.max([tr1, tr2, tr3], axis=0).mean()
+        # ATR - 修複: 正確處理形狀不匹配
+        try:
+            tr1 = highs[-14:] - lows[-14:]
+            close_prev = np.concatenate([[closes[-15]], closes[-14:-1]])
+            tr2 = np.abs(highs[-14:] - close_prev)
+            tr3 = np.abs(lows[-14:] - close_prev)
+            tr = np.maximum(tr1, np.maximum(tr2, tr3))
+            atr = np.mean(tr)
+        except Exception as e:
+            logger.warning(f'[ATR計算] 失敖: {e}')
+            atr = np.mean(highs[-14:] - lows[-14:])
         
         # EMA
-        ema = closes[-5:].mean()  # 粗似 EMA
+        ema = closes[-5:].mean()
         ema_prev = closes[-6:-5].mean() if len(closes) >= 6 else closes[-5]
         ema_slope = (ema - ema_prev) / (ema_prev + 1e-8) if ema_prev > 0 else 0
         
@@ -314,94 +295,82 @@ class CompleteFeatureExtractor:
     
     @staticmethod
     def extract_17_features(symbol, timeframe, prediction_kline):
-        """提取完整的17個特椅"""
         try:
-            # 獲取 100 根K棍數據
             closes, klines_data = BBCalculator.fetch_historical_closes(symbol, timeframe, limit=100)
+            
             if closes is None or len(closes) < 50:
-                logger.warning(f'[17特椅] {symbol}: 數據不足')
+                logger.warning(f'[17特徵] {symbol}: 數據不足')
                 return None
             
-            # 提取 OHLCV
             highs = np.array([k['high'] for k in klines_data])
             lows = np.array([k['low'] for k in klines_data])
             volumes = np.array([k['volume'] for k in klines_data])
             
-            # 計算基本指標
             indicators = CompleteFeatureExtractor.calculate_indicators(closes, highs, lows, volumes)
             
-            # 當前價格
             curr_close = prediction_kline['close']
             curr_high = prediction_kline['high']
             curr_low = prediction_kline['low']
             curr_volume = prediction_kline['volume']
             
-            # 提取 17 個特椅
+            # 提取 17 個特徵
             features = []
             
-            # 動量特椅 (3個)
             momentum = np.mean(np.diff(closes[-5:]))
             momentum_prev = np.mean(np.diff(closes[-10:-5]))
             momentum_decay = (momentum_prev - momentum) / (abs(momentum_prev) + 1e-8)
-            features.append(momentum_decay)  # 0: momentum_decay_rate
+            features.append(momentum_decay)
             
-            # 比例特椅 (3個)
             bounce_height = (curr_high - curr_close) / (indicators['bb_width'] + 1e-8)
-            features.append(bounce_height)  # 1: bounce_height_ratio
+            features.append(bounce_height)
             
-            time_to_recovery = 0  # 简銀
-            features.append(time_to_recovery)  # 2: time_to_recovery
+            features.append(0)  # time_to_recovery
             
             breakout_dist = (curr_high / (indicators['bb_upper'] + 1e-8) - 1) * 100
-            features.append(breakout_dist)  # 3: breakout_distance
+            features.append(breakout_dist)
             
-            # RSI相關 (2個)
-            features.append(indicators['rsi'])  # 4: rsi_level
-            features.append(indicators['volume_ratio'])  # 5: volume_ratio
+            features.append(indicators['rsi'])
+            features.append(indicators['volume_ratio'])
             
-            # 波動率相關 (3個)
             volatility = np.std(np.diff(closes[-20:]))
             avg_volatility = np.std(np.diff(closes[-40:-20]))
             vol_regime = volatility / (avg_volatility + 1e-8)
-            features.append(vol_regime)  # 6: volatility_regime
+            features.append(vol_regime)
             
             bb_width_ratio = indicators['bb_width'] / (np.mean([klines_data[i]['high'] - klines_data[i]['low'] for i in range(-20, 0)]) + 1e-8)
-            features.append(bb_width_ratio)  # 7: bb_width_ratio
+            features.append(bb_width_ratio)
             
             momentum_dir = np.sign(np.mean(np.diff(closes[-5:])))
-            features.append(momentum_dir)  # 8: price_momentum_direction
+            features.append(momentum_dir)
             
-            # 优選特椅 (3個)
             price_to_middle = (curr_close - indicators['bb_middle']) / (indicators['bb_middle'] + 1e-8)
-            features.append(price_to_middle)  # 9: price_to_bb_middle
+            features.append(price_to_middle)
             
             dist_lower = (curr_close - indicators['bb_lower']) / (indicators['bb_width'] + 1e-8)
-            features.append(dist_lower)  # 10: dist_lower_norm
+            features.append(dist_lower)
             
             dist_upper = (indicators['bb_upper'] - curr_close) / (indicators['bb_width'] + 1e-8)
-            features.append(dist_upper)  # 11: dist_upper_norm
+            features.append(dist_upper)
             
-            # 基税指標 (3個)
-            features.append(indicators['rsi'])  # 12: rsi
-            features.append(indicators['atr'])  # 13: atr
-            features.append(indicators['ema_slope'])  # 14: ema_slope
+            features.append(indicators['rsi'])
+            features.append(indicators['atr'])
+            features.append(indicators['ema_slope'])
             
-            # 反配特椅 (3個)
             reversal_strength = abs(momentum) / (abs(momentum_prev) + 1e-8) if momentum_prev != 0 else 0
-            features.append(reversal_strength)  # 15: momentum_reversal_strength
+            features.append(reversal_strength)
             
             vol_momentum = curr_volume / (indicators['avg_volume'] + 1e-8)
-            features.append(vol_momentum)  # 16: volume_momentum_ratio
+            features.append(vol_momentum)
             
-            logger.info(f'[17特椅] {symbol} {timeframe}: 已提取 17 個特椅')
+            logger.info(f'[17特徵] {symbol} {timeframe}: 成功提取')
             return np.array(features, dtype=np.float32)
         
         except Exception as e:
-            logger.error(f'[17特椅] 提取失敖: {e}')
+            logger.error(f'[17特徵] {symbol} 失敖: {e}')
             return None
 
 # ============================================================
-# 有效性 & 波動性模型
+# 模型加載
 # ============================================================
 
 class ModelLoader:
@@ -420,8 +389,6 @@ class ModelLoader:
                 return None
 
 class ValidityChecker:
-    """有效性檢查 - 使用完整的17個特椅"""
-    
     def __init__(self):
         self.models = {}
         self.scalers = {}
@@ -439,20 +406,16 @@ class ValidityChecker:
                 if model and scaler:
                     self.models[(symbol, timeframe)] = model
                     self.scalers[(symbol, timeframe)] = scaler
-                    logger.debug(f'已加載: {symbol} {timeframe}')
     
     def predict(self, symbol, timeframe, features):
-        """預測有效性"""
         key = (symbol, timeframe)
         if key not in self.models:
-            logger.warning(f'[有效性] {symbol} {timeframe}: 模型未加載')
             return None
         
         try:
             model = self.models[key]
             scaler = self.scalers[key]
             
-            # 標準化特椅
             features_scaled = scaler.transform([features])
             proba = model.predict_proba(features_scaled)[0]
             valid_prob = float(proba[1]) if len(proba) > 1 else 0.5
@@ -478,8 +441,6 @@ class ValidityChecker:
             return None
 
 class VolatilityPredictor:
-    """波動性預測 - 使用完整的17個特椅"""
-    
     def __init__(self):
         self.models = {}
         self.scalers = {}
@@ -497,20 +458,16 @@ class VolatilityPredictor:
                 if model and scaler:
                     self.models[(symbol, timeframe)] = model
                     self.scalers[(symbol, timeframe)] = scaler
-                    logger.debug(f'已加載: {symbol} {timeframe}')
     
     def predict(self, symbol, timeframe, features):
-        """預測波動性"""
         key = (symbol, timeframe)
         if key not in self.models:
-            logger.warning(f'[波動性] {symbol} {timeframe}: 模型未加載')
             return None
         
         try:
             model = self.models[key]
             scaler = self.scalers[key]
             
-            # 標準化特椅（提取前15個特椅）
             features_vol = features[:15]
             features_scaled = scaler.transform([features_vol])
             predicted_vol = float(model.predict(features_scaled)[0])
@@ -555,18 +512,14 @@ def health_check():
     return jsonify({
         'status': 'ok',
         'timestamp': datetime.now().isoformat(),
-        'description': 'BB 反彈實時監控系統 V5 (簡化版)',
+        'description': 'BB 反彈實時監控系統 V5',
         'prediction_strategy': CURRENT_STRATEGY,
-        'features': '17個完整特椅'
+        'features': '17個完整特徵'
     })
 
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    """預測 K 棍是否接近/接觸 BB 軌道
-    
-    詳新：什一方声音次數程度有效性波動性預測，不门為股窱根西接近股窱根西
-    """
     try:
         data = request.get_json()
         symbol = data.get('symbol', '').upper()
@@ -577,34 +530,25 @@ def predict():
         if timeframe not in TIMEFRAMES:
             return jsonify({'error': f'無效的時間框架: {timeframe}'}), 400
         
-        logger.info(f'\n[請求] {symbol} {timeframe}')
+        logger.info(f'[請求] {symbol} {timeframe}')
         
-        # 第一步: 計算 BB
+        # BB 計算
         bb_result = BBCalculator.analyze_bb_status(symbol, timeframe, strategy=CURRENT_STRATEGY)
         
-        # 第二步: 模型預測 (單上詳新: 根據 warning_level 不根據 status)
+        # 模型預測
         validity_result = None
         volatility_result = None
         
-        # ✅ 修正：值詳新 warning_level 抽取模型預測
         if bb_result['warning_level'] in ['danger', 'warning', 'caution']:
-            logger.info(f'[模型] 觸發模型預測 (警告={bb_result["warning_level"]})')
+            logger.info(f'[模型] 觸發預測 (警告={bb_result["warning_level"]})')
             
             prediction_kline = bb_result['prediction_kline']
             if prediction_kline:
-                # 提取 17 個特椅
                 features = CompleteFeatureExtractor.extract_17_features(symbol, timeframe, prediction_kline)
                 
                 if features is not None:
-                    logger.info(f'[特椅提取] {symbol}: 完成')
                     validity_result = validity_checker.predict(symbol, timeframe, features)
                     volatility_result = volatility_predictor.predict(symbol, timeframe, features)
-                else:
-                    logger.warning(f'[警告] 特椅提取失敖')
-            else:
-                logger.warning(f'[警告] 估K棍無效')
-        
-        logger.info(f'[回應] {symbol} {timeframe} - 狀態={bb_result["status"]}, 警告={bb_result["warning_level"]}, 距離={bb_result["distance_percent"]:.8f}%\n')
         
         return jsonify({
             'symbol': symbol,
@@ -633,9 +577,9 @@ def predict():
 if __name__ == '__main__':
     try:
         logger.info('=' * 60)
-        logger.info('BB 反彈實時監控系統 V5 (簡化版)')
+        logger.info('BB 反彈實時監控系統 V5')
         logger.info('=' * 60)
-        logger.info('特椅: 17個完整特椅提取')
+        logger.info('特徵: 17個完整特徵提取')
         logger.info('BB計算: 使用上一根完整K棍')
         logger.info('模型預測: 根據 warning_level (接近或匹警告時)')
         logger.info('=' * 60)
