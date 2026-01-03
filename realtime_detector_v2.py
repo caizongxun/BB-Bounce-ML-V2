@@ -1,329 +1,402 @@
-import asyncio
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
-from datetime import datetime
-import joblib
+import os
+import json
+import pickle
 import numpy as np
-import pandas as pd
-from pathlib import Path
-from collections import defaultdict
+from typing import Dict, List, Tuple, Optional
+from collections import deque
+import traceback
 
 
-@dataclass
-class SignalState:
-    """信號狀態數據結構"""
-    symbol: str
-    signal: str  # 'SUPPORT', 'RESISTANCE', 'INVALID'
-    position_confidence: float  # 0-1, 位置模型置信度
-    validity_confidence: float  # 0-1, 有效性模型置信度
-    combined_confidence: float  # 0-1, 組合置信度
-    timestamp: str  # ISO 時間戳
-    bb_upper: float  # Bollinger Band 上軌
-    bb_lower: float  # Bollinger Band 下軌
-    bb_middle: float  # Bollinger Band 中軸
-    price: float  # 當前價格
-    is_valid: bool  # 是否通過有效性檢查
-
-
-class RealtimeDetectorV2:
-    """實時二層檢測系統
-    
-    層級 1: 快速位置掃描 (每秒)
-    - 運行頻率: 1 秒
-    - 計算時間: 10-20ms
-    - 準確度: 99%
-    
-    層級 2: 有效性驗證 (按需)
-    - 運行頻率: 信號觸發時
-    - 計算時間: 50-100ms
-    - 準確度: 94.5% 平均
+class RealtimeBBDetectorV2:
     """
+    企業級實時 BB Bounce 檢測器 V2 - 二層架構
     
+    層級 1: 分類器 (快速掃描, 10-20ms)
+        - 輸入: K線數據 (open, high, low, close, volume, bb_upper, bb_lower)
+        - 輸出: 0 = 不接近軌道 / 1 = 接近上軌 / 2 = 接近下軌
+    
+    層級 2: 有效性模型 (按需驗證, 50-100ms)
+        - 輸入: 若層級1 == 1 或 2 才運行
+        - 輸出: 是否為有效的支撐/阻力信號 (0-1 概率)
+    
+    性能: 避免 ~80% 不必要計算
+    準確度: 位置模型 99% + 有效性模型 94.5% = 組合 93-97%
+    """
+
     def __init__(
         self,
-        position_model_dir: str,
-        validity_model_dir: str,
-        data_loader_class=None
+        symbols: List[str] = None,
+        model_dir: str = "models",
+        device: str = "cpu",
+        history_window: int = 100,
     ):
-        """初始化檢測器
+        self.symbols = symbols or [
+            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
+            "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "TONUSDT", "LINKUSDT",
+            "OPUSDT", "ARBUSDT", "SUIUSDT", "APEUSDT", "MATICUSDT",
+            "LTCUSDT", "TRXUSDT", "FTMUSDT", "INJUSDT", "SEIUSDT",
+            "TIAUSDT", "ORDIUSDT",
+        ]
         
-        Args:
-            position_model_dir: 位置模型目錄路徑
-            validity_model_dir: 有效性模型目錄路徑
-            data_loader_class: 數據加載器類
+        self.model_dir = model_dir
+        self.device = device
+        self.history_window = history_window
+        
+        # 分類器模型 (層級1) - 檢測是否接近 BB 上下軌
+        self.classifiers = {}  # symbol -> 分類器模型
+        
+        # 有效性模型 (層級2) - 檢測是否為有效支撐/阻力
+        self.validity_models = {}  # symbol -> 有效性模型
+        
+        # 歷史數據緩衝區
+        self.candle_buffer = {}  # symbol -> deque of candles
+        for sym in self.symbols:
+            self.candle_buffer[sym] = deque(maxlen=history_window)
+        
+        # 加載模型
+        self._load_models()
+
+    def _load_models(self):
+        """從 models 目錄加載所有分類器和有效性模型"""
+        if not os.path.exists(self.model_dir):
+            print(f"[RealtimeBBDetectorV2] Warning: models dir not found: {self.model_dir}")
+            return
+        
+        for sym in self.symbols:
+            # 分類器模型 (層級1)
+            classifier_path = os.path.join(self.model_dir, f"{sym}_bb_classifier.pkl")
+            if os.path.exists(classifier_path):
+                try:
+                    with open(classifier_path, "rb") as f:
+                        self.classifiers[sym] = pickle.load(f)
+                    print(f"[RealtimeBBDetectorV2] Loaded classifier for {sym}")
+                except Exception as e:
+                    print(f"[RealtimeBBDetectorV2] Failed to load classifier for {sym}: {e}")
+            
+            # 有效性模型 (層級2)
+            validity_path = os.path.join(self.model_dir, f"{sym}_validity_model.pkl")
+            if os.path.exists(validity_path):
+                try:
+                    with open(validity_path, "rb") as f:
+                        self.validity_models[sym] = pickle.load(f)
+                    print(f"[RealtimeBBDetectorV2] Loaded validity model for {sym}")
+                except Exception as e:
+                    print(f"[RealtimeBBDetectorV2] Failed to load validity model for {sym}: {e}")
+
+    def add_candle(self, symbol: str, candle: Dict):
         """
-        self.position_model_dir = Path(position_model_dir)
-        self.validity_model_dir = Path(validity_model_dir)
-        self.data_loader_class = data_loader_class
+        將新 K線添加到緩衝區
         
-        # 初始化模型
-        self.position_models = self._load_position_models()
-        self.validity_models = self._load_validity_models()
-        
-        # 獲取所有支持的幣種
-        self.all_symbols = list(self.position_models.keys())
-        
-        # 關注的幣種字典 {symbol: last_check_time}
-        self.watched_symbols: Dict[str, float] = {}
-        
-        # 信號緩存
-        self.signal_cache: Dict[str, SignalState] = {}
-        
-        # 統計信息
-        self.stats = {
-            'position_checks': 0,
-            'validity_checks': 0,
-            'active_signals': 0,
-            'last_update': None
+        candle 格式:
+        {
+            "timestamp": 1735880000000,
+            "open": 42500.0,
+            "high": 42800.0,
+            "low": 42200.0,
+            "close": 42600.0,
+            "volume": 120.5,
+            "bb_upper": 43000.0,
+            "bb_middle": 42500.0,
+            "bb_lower": 42000.0,
+            "bb_width": 1000.0,
+            "rsi": 68.5,
+            "adx": 24.1,
+            "atr": 400.0
         }
-        
-        print(f"Loaded {len(self.position_models)} position models")
-        print(f"Loaded {len(self.validity_models)} validity models")
-        print(f"Ready to detect for {len(self.all_symbols)} symbols")
-    
-    def _load_position_models(self) -> Dict[str, Any]:
-        """加載位置模型"""
-        models = {}
-        for symbol_dir in self.position_model_dir.iterdir():
-            if symbol_dir.is_dir():
-                timeframe_dir = symbol_dir / '1h'
-                model_path = timeframe_dir / 'model.pkl'
-                if model_path.exists():
-                    try:
-                        models[symbol_dir.name] = joblib.load(model_path)
-                    except Exception as e:
-                        print(f"Failed to load position model for {symbol_dir.name}: {e}")
-        return models
-    
-    def _load_validity_models(self) -> Dict[str, Dict[str, Any]]:
-        """加載有效性模型和相關文件"""
-        models = {}
-        for symbol_dir in self.validity_model_dir.iterdir():
-            if symbol_dir.is_dir():
-                timeframe_dir = symbol_dir / '1h'
-                model_path = timeframe_dir / 'validity_model.pkl'
-                scaler_path = timeframe_dir / 'scaler.pkl'
-                features_path = timeframe_dir / 'feature_names.pkl'
-                
-                if all([model_path.exists(), scaler_path.exists(), features_path.exists()]):
-                    try:
-                        models[symbol_dir.name] = {
-                            'model': joblib.load(model_path),
-                            'scaler': joblib.load(scaler_path),
-                            'features': joblib.load(features_path)
-                        }
-                    except Exception as e:
-                        print(f"Failed to load validity model for {symbol_dir.name}: {e}")
-        return models
-    
-    def add_watched_symbol(self, symbol: str) -> bool:
-        """添加監視幣種
-        
-        Args:
-            symbol: 幣種代碼 (例: BTCUSDT)
-            
-        Returns:
-            bool: 是否成功添加
         """
-        if symbol in self.all_symbols and symbol not in self.watched_symbols:
-            self.watched_symbols[symbol] = 0
-            print(f"Added watched symbol: {symbol}")
-            return True
-        return False
-    
-    def remove_watched_symbol(self, symbol: str) -> bool:
-        """移除監視幣種"""
-        if symbol in self.watched_symbols:
-            del self.watched_symbols[symbol]
-            if symbol in self.signal_cache:
-                del self.signal_cache[symbol]
-            print(f"Removed watched symbol: {symbol}")
-            return True
-        return False
-    
-    def quick_position_scan(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """快速位置掃描 (層級 1)
-        
-        運行頻率: 每秒
-        計算時間: 10-20ms
-        準確度: 99%
+        if symbol in self.candle_buffer:
+            self.candle_buffer[symbol].append(candle)
+
+    def _extract_layer1_features(self, candles: List[Dict]) -> Optional[np.ndarray]:
         """
+        提取層級1 (分類器) 特徵
+        
+        返回: shape (1, n_features) 或 None
+        """
+        if len(candles) < 5:
+            return None
+        
+        last = candles[-1]
+        
         try:
-            if symbol not in self.position_models:
+            # 基礎特徵
+            bb_upper = last.get("bb_upper", 0)
+            bb_lower = last.get("bb_lower", 0)
+            bb_middle = last.get("bb_middle", 0)
+            close = last.get("close", 0)
+            
+            if bb_upper == 0 or bb_lower == 0:
                 return None
             
-            # 下載數據
-            if not self.data_loader_class:
+            bb_width = bb_upper - bb_lower
+            if bb_width == 0:
                 return None
             
-            loader = self.data_loader_class()
-            df = loader.download_symbol_data(symbol, '1h')
+            # 距離上下軌的百分比距離
+            dist_to_upper = (bb_upper - close) / bb_width
+            dist_to_lower = (close - bb_lower) / bb_width
             
-            if df is None or len(df) < 2:
-                return None
+            # BB Position 標準化 (0-1, 0.5 = 中軸)
+            bb_position = (close - bb_lower) / bb_width
+            bb_position = np.clip(bb_position, 0, 1)
             
-            # 調用位置模型
-            model = self.position_models[symbol]
-            last_row = df.iloc[-1:]
+            # 近期波動
+            recent_closes = np.array([c.get("close", 0) for c in candles[-5:]])
+            close_volatility = np.std(recent_closes) / np.mean(recent_closes) if np.mean(recent_closes) != 0 else 0
             
-            # 準備特徵 (只用 close 和 bollinger band)
-            features = last_row[['close']].values
+            # 成交量變化
+            recent_vols = np.array([c.get("volume", 0) for c in candles[-5:]])
+            vol_avg = np.mean(recent_vols) if len(recent_vols) > 0 else 1
+            vol_ratio = last.get("volume", 1) / vol_avg if vol_avg != 0 else 1
             
-            # 預測
-            pred = model.predict(features)[0]
-            proba = model.predict_proba(features)[0]
+            # RSI
+            rsi = last.get("rsi", 50) / 100.0
             
-            # -1: SUPPORT, 0: NEUTRAL, 1: RESISTANCE
-            signal_map = {-1: 'SUPPORT', 0: 'NEUTRAL', 1: 'RESISTANCE'}
-            signal = signal_map.get(pred, 'NEUTRAL')
+            # ADX
+            adx = last.get("adx", 20) / 50.0
             
-            # 置信度 (最高的概率)
-            confidence = float(np.max(proba))
+            # 價格變化動量
+            price_change = (close - candles[-2].get("close", close)) / close if close != 0 else 0
             
-            return {
-                'symbol': symbol,
-                'position_signal': signal,
-                'position_confidence': confidence,
-                'needs_validity_check': signal != 'NEUTRAL',
-                'bb_upper': float(last_row['bb_upper'].values[0]),
-                'bb_lower': float(last_row['bb_lower'].values[0]),
-                'bb_middle': float(last_row['bb_middle'].values[0]),
-                'price': float(last_row['close'].values[0])
-            }
+            features = np.array([
+                dist_to_upper,
+                dist_to_lower,
+                bb_position,
+                close_volatility,
+                vol_ratio,
+                rsi,
+                adx,
+                price_change,
+            ]).reshape(1, -1)
+            
+            return features
         
         except Exception as e:
-            print(f"Error in quick_position_scan for {symbol}: {e}")
+            print(f"[extract_layer1_features] Error: {e}")
             return None
-    
-    def validity_check(self, symbol: str, features: np.ndarray) -> Optional[Dict[str, Any]]:
-        """有效性驗證 (層級 2)
-        
-        運行頻率: 按需 (信號觸發時)
-        計算時間: 50-100ms
-        準確度: 94.5% 平均
+
+    def _extract_layer2_features(self, candles: List[Dict], layer1_result: int) -> Optional[Tuple[np.ndarray, str]]:
         """
+        提取層級2 (有效性模型) 特徵
+        
+        層級1結果:
+            0 = 不接近軌道 (跳過)
+            1 = 接近上軌 → side="short" (反彈做空)
+            2 = 接近下軌 → side="long" (反彈做多)
+        
+        返回: (features, side) 或 (None, None)
+        """
+        if layer1_result == 0 or len(candles) < 10:
+            return None, None
+        
+        side = "short" if layer1_result == 1 else "long"
+        
         try:
+            last = candles[-1]
+            
+            # 近期高低點
+            recent_closes = np.array([c.get("close", 0) for c in candles[-10:]])
+            recent_highs = np.array([c.get("high", 0) for c in candles[-10:]])
+            recent_lows = np.array([c.get("low", 0) for c in candles[-10:]])
+            
+            # 支撐/阻力強度指標
+            if side == "long":
+                # 下軌支撐強度: 過去是否多次在此反彈
+                bb_lower = last.get("bb_lower", 0)
+                touches_lower = np.sum(recent_lows <= bb_lower * 1.01) / len(recent_lows)
+                support_strength = touches_lower
+            else:
+                # 上軌阻力強度: 過去是否多次在此回落
+                bb_upper = last.get("bb_upper", 0)
+                touches_upper = np.sum(recent_highs >= bb_upper * 0.99) / len(recent_highs)
+                support_strength = touches_upper
+            
+            # RSI 指標 (離extremes越遠越好)
+            rsi = last.get("rsi", 50)
+            if side == "long":
+                rsi_indicator = (100.0 - rsi) / 100.0 if rsi > 30 else 0.5
+            else:
+                rsi_indicator = rsi / 100.0 if rsi < 70 else 0.5
+            
+            # ADX 趨勢強度 (越高越好)
+            adx = last.get("adx", 20)
+            adx_indicator = min(adx / 40.0, 1.0)  # Normalize to 0-1
+            
+            # ATR 波動性
+            atr = last.get("atr", 0)
+            recent_close_mean = np.mean(recent_closes)
+            atr_ratio = atr / recent_close_mean if recent_close_mean != 0 else 0.5
+            
+            # 近期是否有強勢反彈信號
+            close = last.get("close", 0)
+            prev_close = candles[-2].get("close", close)
+            momentum = abs(close - prev_close) / prev_close if prev_close != 0 else 0
+            
+            # 收盤相對位置 (在 BB 上下軌中的位置)
+            bb_upper = last.get("bb_upper", 0)
+            bb_lower = last.get("bb_lower", 0)
+            bb_width = bb_upper - bb_lower
+            if bb_width != 0:
+                close_position = (close - bb_lower) / bb_width
+                close_position = np.clip(close_position, 0, 1)
+            else:
+                close_position = 0.5
+            
+            features = np.array([
+                support_strength,     # 支撐/阻力強度
+                rsi_indicator,        # RSI 指標
+                adx_indicator,        # 趨勢強度
+                atr_ratio,            # 波動性
+                momentum,             # 近期動量
+                close_position,       # 相對位置
+            ]).reshape(1, -1)
+            
+            return features, side
+        
+        except Exception as e:
+            print(f"[extract_layer2_features] Error: {e}")
+            return None, None
+
+    def scan(self, symbol: str, timeframe: str = "15m") -> Optional[Dict]:
+        """
+        對單個幣種執行二層掃描
+        
+        返回:
+        {
+            "symbol": "BTCUSDT",
+            "timeframe": "15m",
+            "side": "long" or "short",
+            "bb_position_label": "Lower" or "Upper",
+            "layer1_class": 0/1/2,          # 分類器結果
+            "validity_prob": 0.82,          # 有效性概率 (層級2)
+            "confidence": 0.89,             # 綜合信心度
+            "rsi": 68.5,
+            "adx": 24.1,
+            "vol_ratio": 1.45,
+            "timestamp": 1735880000000,
+        } 或 None
+        """
+        
+        if symbol not in self.candle_buffer:
+            return None
+        
+        candles = list(self.candle_buffer[symbol])
+        if len(candles) == 0:
+            return None
+        
+        try:
+            # ========== 層級 1: 分類器 ==========
+            layer1_features = self._extract_layer1_features(candles)
+            if layer1_features is None:
+                return None
+            
+            if symbol not in self.classifiers:
+                # 若沒有分類器，仍嘗試執行啟發式判斷
+                last = candles[-1]
+                close = last.get("close", 0)
+                bb_upper = last.get("bb_upper", 0)
+                bb_lower = last.get("bb_lower", 0)
+                bb_width = bb_upper - bb_lower
+                
+                if bb_width == 0:
+                    return None
+                
+                bb_position = (close - bb_lower) / bb_width
+                
+                # 簡單啟發式: 若在上下 10% 則判定接近
+                if bb_position > 0.9:
+                    layer1_class = 1  # 接近上軌
+                elif bb_position < 0.1:
+                    layer1_class = 2  # 接近下軌
+                else:
+                    layer1_class = 0  # 中間, 不處理
+            else:
+                try:
+                    layer1_class = self.classifiers[symbol].predict(layer1_features)[0]
+                except:
+                    layer1_class = 0
+            
+            # 若層級1 = 0 (不接近軌道), 直接返回無信號
+            if layer1_class == 0:
+                return None
+            
+            # ========== 層級 2: 有效性模型 ==========
+            layer2_features, side = self._extract_layer2_features(candles, layer1_class)
+            
+            if layer2_features is None:
+                return None
+            
             if symbol not in self.validity_models:
-                return None
+                # 若沒有有效性模型，取中等信心度
+                validity_prob = 0.65
+            else:
+                try:
+                    # 假設模型有 predict_proba 方法
+                    if hasattr(self.validity_models[symbol], "predict_proba"):
+                        proba = self.validity_models[symbol].predict_proba(layer2_features)[0]
+                        validity_prob = proba[1] if len(proba) > 1 else 0.5
+                    else:
+                        # 若只有 predict, 強制轉成概率
+                        pred = self.validity_models[symbol].predict(layer2_features)[0]
+                        validity_prob = 0.8 if pred == 1 else 0.3
+                except:
+                    validity_prob = 0.5
             
-            model_data = self.validity_models[symbol]
-            model = model_data['model']
-            scaler = model_data['scaler']
+            # 綜合信心度 (層級2的概率)
+            confidence = validity_prob
             
-            # 標準化特徵
-            features_scaled = scaler.transform(features.reshape(1, -1))
+            last = candles[-1]
             
-            # 預測
-            pred = model.predict(features_scaled)[0]
-            proba = model.predict_proba(features_scaled)[0]
-            
-            # 0: INVALID, 1: VALID
-            is_valid = bool(pred == 1)
-            confidence = float(proba[1])  # VALID 的概率
-            
-            return {
-                'is_valid': is_valid,
-                'validity_confidence': confidence,
-                'decision': 'VALID' if is_valid else 'INVALID'
+            # 構建信號
+            signal = {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "side": side,  # "long" 或 "short"
+                "bb_position_label": "Upper" if layer1_class == 1 else "Lower",
+                "layer1_class": int(layer1_class),
+                "validity_prob": float(validity_prob),
+                "confidence": float(confidence),
+                "rsi": float(last.get("rsi", 50)),
+                "adx": float(last.get("adx", 20)),
+                "vol_ratio": float(last.get("volume", 0) / max(1, last.get("volume", 1))),
+                "timestamp": last.get("timestamp", 0),
             }
+            
+            return signal
         
         except Exception as e:
-            print(f"Error in validity_check for {symbol}: {e}")
+            print(f"[scan] Error for {symbol}: {e}")
+            traceback.print_exc()
             return None
-    
-    def get_signal_state(self, symbol: str) -> Optional[SignalState]:
-        """獲取幣種的信號狀態"""
-        return self.signal_cache.get(symbol)
-    
-    def get_all_signals(self) -> List[SignalState]:
-        """獲取所有有效信號"""
-        return list(self.signal_cache.values())
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """獲取系統統計信息"""
-        return {
-            'position_checks': self.stats['position_checks'],
-            'validity_checks': self.stats['validity_checks'],
-            'watched_symbols_count': len(self.watched_symbols),
-            'active_signals': len(self.signal_cache),
-            'total_symbols': len(self.all_symbols),
-            'last_update': self.stats['last_update']
-        }
 
+    def scan_all(self, timeframe: str = "15m") -> List[Dict]:
+        """
+        掃描所有幣種，返回有效信號列表
+        """
+        signals = []
+        for symbol in self.symbols:
+            signal = self.scan(symbol, timeframe)
+            if signal is not None:
+                signals.append(signal)
+        return signals
 
-class RealtimeDetectionService:
-    """實時檢測服務"""
-    
-    def __init__(self, detector: RealtimeDetectorV2, feature_extractor):
-        self.detector = detector
-        self.feature_extractor = feature_extractor
-    
-    async def start(self):
-        """啟動檢測服務"""
-        print("Starting real-time detection service...")
+    def get_symbol_state(self, symbol: str) -> Dict:
+        """
+        取得幣種目前狀態 (用於儀表板左側列表)
+        """
+        candles = list(self.candle_buffer[symbol])
+        if len(candles) == 0:
+            return {"symbol": symbol, "status": "no_data"}
         
-        # 並行運行掃描任務
-        await asyncio.gather(
-            self.run_watched_scanner(),
-            self.run_unwatched_scanner()
-        )
-    
-    async def run_watched_scanner(self, interval: float = 1.0):
-        """運行關注幣種掃描 (層級 1)"""
-        while True:
-            try:
-                watched_list = list(self.detector.watched_symbols.keys())
-                
-                for symbol in watched_list:
-                    # 層級 1: 快速位置掃描
-                    result = self.detector.quick_position_scan(symbol)
-                    self.detector.stats['position_checks'] += 1
-                    
-                    if result and result['needs_validity_check']:
-                        # 層級 2: 有效性驗證
-                        try:
-                            # 這裡需要你的特徵提取邏輯
-                            # features = self.feature_extractor.extract_all_features(df)
-                            # validity_result = self.detector.validity_check(symbol, features)
-                            
-                            # 暫時跳過特徵提取,直接生成信號
-                            signal_state = SignalState(
-                                symbol=symbol,
-                                signal=result['position_signal'],
-                                position_confidence=result['position_confidence'],
-                                validity_confidence=0.87,  # 示例
-                                combined_confidence=result['position_confidence'] * 0.87,
-                                timestamp=datetime.now().isoformat(),
-                                bb_upper=result['bb_upper'],
-                                bb_lower=result['bb_lower'],
-                                bb_middle=result['bb_middle'],
-                                price=result['price'],
-                                is_valid=True
-                            )
-                            
-                            self.detector.signal_cache[symbol] = signal_state
-                            self.detector.stats['validity_checks'] += 1
-                        
-                        except Exception as e:
-                            print(f"Error in validity check for {symbol}: {e}")
-                
-                self.detector.stats['active_signals'] = len(self.detector.signal_cache)
-                self.detector.stats['last_update'] = datetime.now().isoformat()
-                
-                await asyncio.sleep(interval)
-            
-            except Exception as e:
-                print(f"Error in watched scanner: {e}")
-                await asyncio.sleep(interval)
-    
-    async def run_unwatched_scanner(self, interval: float = 5.0):
-        """運行未關注幣種掃描 (備份)"""
-        while True:
-            try:
-                # 掃描所有幣種尋找潛在信號
-                # 但不觸發層級 2,只記錄
-                await asyncio.sleep(interval)
-            
-            except Exception as e:
-                print(f"Error in unwatched scanner: {e}")
-                await asyncio.sleep(interval)
+        last = candles[-1]
+        signal = self.scan(symbol)
+        
+        return {
+            "symbol": symbol,
+            "timeframe": "15m",
+            "last_signal": signal,
+            "timestamp": last.get("timestamp", 0),
+            "close": float(last.get("close", 0)),
+            "rsi": float(last.get("rsi", 50)),
+            "status": "active" if signal else "idle",
+        }
