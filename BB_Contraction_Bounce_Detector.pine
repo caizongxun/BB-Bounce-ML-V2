@@ -1,0 +1,200 @@
+//@version=5
+indicator("BB Contraction Bounce Detector", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// ============================================================
+// 參數設定
+// ============================================================
+
+bb_period = input(20, "BB Period", group="Bollinger Bands")
+bb_std = input(2.0, "BB Std Dev", group="Bollinger Bands")
+
+lookahead = input(5, "Lookahead Bars", group="Detection Logic")
+min_rebound_15m = input(0.008, "Min Rebound 15m (0.8%)", group="Detection Logic")
+min_rebound_1h = input(0.015, "Min Rebound 1h (1.5%)", group="Detection Logic")
+max_drawdown_15m = input(-0.005, "Max Drawdown 15m (-0.5%)", group="Detection Logic")
+max_drawdown_1h = input(-0.01, "Max Drawdown 1h (-1%)", group="Detection Logic")
+bb_contraction_threshold = input(-0.08, "BB Contraction Threshold (-8%)", group="Detection Logic")
+bb_expansion_threshold = input(0.05, "BB Expansion Threshold (5%)", group="Detection Logic")
+
+show_bb = input(true, "Show Bollinger Bands", group="Display")
+show_signals = input(true, "Show Bounce Signals", group="Display")
+show_labels = input(true, "Show Labels", group="Display")
+
+// ============================================================
+// 計算 Bollinger Bands
+// ============================================================
+
+basis = ta.sma(close, bb_period)
+dev = bb_std * ta.stdev(close, bb_period)
+upper = basis + dev
+lower = basis - dev
+bb_width = upper - lower
+bb_width_sma = ta.sma(bb_width, 5)
+
+// ============================================================
+// 計算歷史寬度用於百分位數
+// ============================================================
+
+width_min = ta.lowest(bb_width, 20)
+width_max = ta.highest(bb_width, 20)
+bb_width_percentile = (bb_width - width_min) / (width_max - width_min + 0.0001)
+
+// ============================================================
+// 計算 BB 寬度變化
+// ============================================================
+
+bb_width_change_1bar = (bb_width - bb_width[1]) / (bb_width[1] + 0.0001)
+bb_width_change_2bar = (bb_width - bb_width[2]) / (bb_width[2] + 0.0001)
+bb_width_change_3bar = (bb_width - bb_width[3]) / (bb_width[3] + 0.0001)
+
+// ============================================================
+// 檢測反彈條件
+// ============================================================
+
+// 條件 1: 價格接近下軌
+price_to_lower = (close - lower) / (upper - lower)
+is_near_lower = price_to_lower < 0.20
+
+// 條件 2: 計算未來 lookahead 根的統計
+// (注意: Pine Script 無法向前看，我們用當前和過去的數據反向推理)
+// 實際使用時會看過去 5 根的模式，來判斷當前是否為反彈起點
+
+// 過去 3 根的平均 BB 寬度
+past_avg_width = (bb_width + bb_width[1] + bb_width[2]) / 3
+
+// 過去 7-10 根的平均 BB 寬度 (代表「之前的常態")
+long_past_avg_width = (bb_width[3] + bb_width[4] + bb_width[5] + bb_width[6] + bb_width[7]) / 5
+
+// BB 寬度變化 (過去短期 vs 長期)
+width_change_ratio = (past_avg_width - long_past_avg_width) / (long_past_avg_width + 0.0001)
+
+// 條件 3: 標準差變化
+std_dev_current = ta.stdev(close, bb_period)
+std_dev_past = ta.stdev(close[3], bb_period)
+std_change = (std_dev_current - std_dev_past) / (std_dev_past + 0.0001)
+
+// 條件 4: 成交量
+volume_ratio = volume / ta.sma(volume, 30)
+
+// 條件 5: RSI (動量)
+rsi = ta.rsi(close, 14)
+
+// 條件 6: 最近 K 棒的最小值 (檢查是否曾大幅回撤)
+recent_low = ta.lowest(close, 5)
+recent_high = ta.highest(close, 5)
+recent_range = (recent_high - recent_low) / (close + 0.0001)
+
+// ============================================================
+// 反彈信號邏輯
+// ============================================================
+
+// 信號 1: 強有效反彈
+// - 接近下軌
+// - BB 明顯收縮（過去變寬，現在變窄）
+// - 標準差下降
+// - 可能有成交量進場
+strong_contraction = width_change_ratio < bb_contraction_threshold and std_change < 0
+strong_signal = is_near_lower and strong_contraction and volume_ratio > 0.8
+
+// 信號 2: 中等有效反彈
+// - 接近下軌
+// - BB 寬度在低位 (歷史百分位 < 0.3)
+// - 標準差穩定
+medium_signal = is_near_lower and bb_width_percentile < 0.3 and abs(std_change) < 0.1
+
+// 信號 3: 無效反彈 (反向信號)
+// - 接近下軌
+// - BB 持續擴張
+// - 標準差上升
+// - 很可能繼續下跌
+invalid_signal = is_near_lower and width_change_ratio > bb_expansion_threshold and std_change > 0.05
+
+// ============================================================
+// 繪製 Bollinger Bands
+// ============================================================
+
+if show_bb
+    plot(upper, "BB Upper", color=color.new(color.blue, 50), linewidth=1)
+    plot(basis, "BB Middle", color=color.new(color.gray, 50), linewidth=1)
+    plot(lower, "BB Lower", color=color.new(color.blue, 50), linewidth=1)
+    
+    // 填充 BB 帶
+    fill(plot(upper, "upper_dummy", na), plot(lower, "lower_dummy", na), 
+         color=color.new(color.blue, 95), title="BB Fill")
+
+// ============================================================
+// 繪製信號
+// ============================================================
+
+if show_signals
+    // 強反彈信號 (綠色向上箭頭)
+    if strong_signal
+        plotshape(true, style=shape.arrowup, location=location.belowbar, color=color.new(color.green, 0), size=size.large, title="Strong Bounce Signal")
+        if show_labels
+            label.new(bar_index, low - (high - low) * 0.5, "Strong Bounce\n(BB Contraction)", color=color.new(color.green, 0), textcolor=color.white, style=label.style_label_up, size=size.small)
+    
+    // 中等反彈信號 (淺綠色向上箭頭)
+    if medium_signal and not strong_signal
+        plotshape(true, style=shape.arrowup, location=location.belowbar, color=color.new(color.lime, 0), size=size.normal, title="Medium Bounce Signal")
+        if show_labels
+            label.new(bar_index, low - (high - low) * 0.3, "Medium Bounce\n(Squeeze)", color=color.new(color.lime, 0), textcolor=color.black, style=label.style_label_up, size=size.small)
+    
+    // 無效反彈信號 (紅色向下箭頭)
+    if invalid_signal
+        plotshape(true, style=shape.arrowdown, location=location.abovebar, color=color.new(color.red, 0), size=size.large, title="Invalid Bounce Signal")
+        if show_labels
+            label.new(bar_index, high + (high - low) * 0.5, "Invalid Bounce\n(BB Expanding)", color=color.new(color.red, 0), textcolor=color.white, style=label.style_label_down, size=size.small)
+
+// ============================================================
+// 表格資訊面板
+// ============================================================
+
+var table info_table = na
+
+if barstate.islast
+    if na(info_table)
+        info_table := table.new(position=position.top_right, columns=2, rows=8, border_width=2, border_color=color.gray, frame_width=2, frame_color=color.gray)
+    
+    table.cell(info_table, 0, 0, "BB Width", bgcolor=color.gray, text_color=color.white)
+    table.cell(info_table, 1, 0, str.tostring(bb_width, "#.##"), bgcolor=color.new(color.gray, 20))
+    
+    table.cell(info_table, 0, 1, "Width Change 2bar", bgcolor=color.gray, text_color=color.white)
+    table.cell(info_table, 1, 1, str.tostring(bb_width_change_2bar * 100, "#.##%"), bgcolor=color.new(color.gray, 20))
+    
+    table.cell(info_table, 0, 2, "Std Change", bgcolor=color.gray, text_color=color.white)
+    table.cell(info_table, 1, 2, str.tostring(std_change * 100, "#.##%"), bgcolor=color.new(color.gray, 20))
+    
+    table.cell(info_table, 0, 3, "Width Percentile", bgcolor=color.gray, text_color=color.white)
+    table.cell(info_table, 1, 3, str.tostring(bb_width_percentile * 100, "#.##%"), bgcolor=color.new(color.gray, 20))
+    
+    table.cell(info_table, 0, 4, "Price to Lower", bgcolor=color.gray, text_color=color.white)
+    table.cell(info_table, 1, 4, str.tostring(price_to_lower * 100, "#.##%"), bgcolor=color.new(color.gray, 20))
+    
+    table.cell(info_table, 0, 5, "Volume Ratio", bgcolor=color.gray, text_color=color.white)
+    table.cell(info_table, 1, 5, str.tostring(volume_ratio, "#.##x"), bgcolor=color.new(color.gray, 20))
+    
+    table.cell(info_table, 0, 6, "RSI 14", bgcolor=color.gray, text_color=color.white)
+    table.cell(info_table, 1, 6, str.tostring(rsi, "#.##"), bgcolor=color.new(color.gray, 20))
+    
+    // 信號狀態
+    signal_text = if strong_signal
+        "🟢 STRONG BOUNCE"
+    else if medium_signal
+        "🟡 MEDIUM BOUNCE"
+    else if invalid_signal
+        "🔴 INVALID BOUNCE"
+    else
+        "⚪ NO SIGNAL"
+    
+    table.cell(info_table, 0, 7, "Status", bgcolor=color.gray, text_color=color.white)
+    table.cell(info_table, 1, 7, signal_text, bgcolor=color.new(color.gray, 20), text_color=color.white)
+
+// ============================================================
+// 告警
+// ============================================================
+
+if strong_signal
+    alert("Strong Bounce Signal Detected!", alert.freq_once_per_bar)
+
+if invalid_signal
+    alert("Invalid Bounce Signal - Caution!", alert.freq_once_per_bar)
