@@ -5,6 +5,8 @@ BB反彈ML系統 - 實時服務 V5 (簡化版)
 使用 Binance 完整歷史數據來計算 BB
 
 改進：使用上一根完全形成的K棒做預測，避免預測閃爍
+
+預測穩定性修複：不僅BB計算用上一根K棒，有效性/波動性也用上一根K棒
 """
 
 import numpy as np
@@ -99,7 +101,7 @@ class BBCalculator:
                 klines = response.json()
                 closes = np.array([float(k[4]) for k in klines])
                 
-                # 同時返回完整K棒信息，用於K棒閉合檢測
+                # 同時近回完整K棒信息，用於K棒閉合檢測
                 klines_data = [{
                     'open': float(k[1]),
                     'high': float(k[2]),
@@ -126,7 +128,7 @@ class BBCalculator:
     def calculate_bb(symbol, timeframe, current_ohlcv, strategy=PredictionStrategy.PREVIOUS_COMPLETE):
         """計算 BB 通道值
         
-        改進邏輯：
+        改進邊連輯：
         1. 獲取最近 100 根完整K棒
         2. 根據策略選擇用哪一根做預測：
            - PREVIOUS_COMPLETE: 使用倒數第二根（已閉合）
@@ -204,6 +206,7 @@ class BBCalculator:
                 'bb_lower': None,
                 'kline_status': 'ERROR',
                 'prediction_source': 'none',
+                'prediction_kline': None,
             }
         
         # 使用預測K棒的數據（而不是當前K棒的實時價格）
@@ -223,6 +226,7 @@ class BBCalculator:
                 'bb_lower': bb_lower,
                 'kline_status': kline_status,
                 'prediction_source': 'failed',
+                'prediction_kline': None,
             }
         
         # 計算件數比例距離（使用預測K棒的 high/low）
@@ -295,6 +299,7 @@ class BBCalculator:
             'bb_lower': bb_lower,
             'kline_status': kline_status,
             'prediction_source': 'previous_complete' if strategy == PredictionStrategy.PREVIOUS_COMPLETE else strategy,
+            'prediction_kline': prediction_kline,  # 返回預測K棒
         }
 
 # ============================================================
@@ -422,7 +427,7 @@ class VolatilityPredictor:
         c = ohlcv.get('close', 0)
         v = ohlcv.get('volume', 1)
         
-        # 從有效數據提取特椅
+        # 從有效数据提取特椅
         features = [
             (h - l) / l if l > 0 else 0,     # 0: 浪動
             c / c if c > 0 else 1,           # 1: 住有方位
@@ -518,13 +523,21 @@ def predict():
         bb_result = BBCalculator.analyze_bb_status(symbol, timeframe, ohlcv, strategy=CURRENT_STRATEGY)
         
         # 第二步: 只有接近/接觸時才調用模型
+        # 重要：用預測K棒做有效性和波動性預測（而不是當前K棒）
         validity_result = None
         volatility_result = None
         
         if bb_result['status'] in ['approaching', 'touched']:
             logger.info(f'[模型] 觸發模型預測 (狀態={bb_result["status"]})')
-            validity_result = validity_checker.predict(symbol, timeframe, ohlcv)
-            volatility_result = volatility_predictor.predict(symbol, timeframe, ohlcv)
+            
+            # 統一用預測K棒（與BB一根的）做有效性/波動性預測
+            prediction_kline = bb_result['prediction_kline']
+            if prediction_kline:
+                logger.info(f'[預測踊下文] 使用同一K棒：close={prediction_kline["close"]:.2f}')
+                validity_result = validity_checker.predict(symbol, timeframe, prediction_kline)
+                volatility_result = volatility_predictor.predict(symbol, timeframe, prediction_kline)
+            else:
+                logger.warning(f'[警告] 估K棒無效，跳過模型預測')
         
         logger.info(f'[回應] {symbol} {timeframe} - 狀態={bb_result["status"]}, 距離={bb_result["distance_percent"]:.8f}%, K棒狀態={bb_result["kline_status"]}\n')
         
@@ -564,8 +577,8 @@ if __name__ == '__main__':
         logger.info('     - PREVIOUS_COMPLETE: 使用上一根完全K棒（推薦）')
         logger.info('     - LATEST_INCOMPLETE: 使用最新K棒（敏感但閃爍）')
         logger.info('     - SMOOTHED: 平衡策略')
-        logger.info('  4. 檢測接近/接觸')
-        logger.info('  5. 只有接近/接觸時才調用模型')
+        logger.info('  4. 檢測接近/接觸：統一用預測K棒')
+        logger.info('  5. 只有接近/接觸時才調用模型：統一用預測K棒')
         logger.info('=' * 60)
         
         logger.info(f'部署地址: 0.0.0.0:5000')
