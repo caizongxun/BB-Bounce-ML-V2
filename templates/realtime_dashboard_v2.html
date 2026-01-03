@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+  <title>BB Bounce ML - Realtime Detector V2</title>
+  <style>
+    :root {
+      --color-white: rgba(255, 255, 255, 1);
+      --color-black: rgba(0, 0, 0, 1);
+      --color-charcoal-700: rgba(31, 33, 33, 1);
+      --color-charcoal-800: rgba(38, 40, 40, 1);
+      --color-gray-200: rgba(245, 245, 245, 1);
+      --color-gray-300: rgba(167, 169, 169, 1);
+      --color-teal-300: rgba(50, 184, 198, 1);
+      --color-teal-400: rgba(45, 166, 178, 1);
+      --color-teal-500: rgba(33, 128, 141, 1);
+      --color-red-400: rgba(255, 84, 89, 1);
+      --color-red-500: rgba(192, 21, 47, 1);
+      --color-orange-400: rgba(230, 129, 97, 1);
+      --color-green-500: rgba(34, 197, 94, 1);
+      --color-yellow-400: rgba(250, 204, 21, 1);
+      --color-blue-500: rgba(59, 130, 246, 1);
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1a202c 50%, #111827 100%);
+      color: var(--color-gray-200);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body { display: flex; }
+
+    .app-shell {
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      grid-template-columns: 300px 1fr 350px;
+      gap: 16px;
+      width: 100%;
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 16px 20px;
+    }
+
+    header {
+      grid-column: 1 / 4;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .header-title h1 { margin: 0; font-size: 20px; font-weight: 600; color: var(--color-gray-200); }
+    .header-controls { display: flex; gap: 12px; }
+    .btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.2s; }
+    .btn-primary { background: linear-gradient(135deg, var(--color-green-500), var(--color-teal-400)); color: #0b1120; }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(34, 197, 94, 0.4); }
+    .btn-secondary { background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.5); color: var(--color-gray-200); }
+    .btn-secondary:hover { background: rgba(148, 163, 184, 0.3); }
+
+    .control-section {
+      grid-column: 1 / 4;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      padding: 16px 20px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 12px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .control-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-gray-300);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    select, input[type="checkbox"] {
+      padding: 8px 12px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      border-radius: 6px;
+      color: var(--color-gray-200);
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    select:focus { outline: none; border-color: var(--color-teal-400); }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .layout-main {
+      grid-row: 3;
+      grid-column: 1 / 4;
+      display: grid;
+      grid-template-columns: 300px 1fr 350px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .panel {
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(55, 65, 81, 0.8);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .panel-title { font-size: 14px; font-weight: 600; color: var(--color-gray-200); margin: 0; margin-bottom: 8px; border-bottom: 1px solid rgba(148, 163, 184, 0.2); padding-bottom: 8px; }
+
+    .symbol-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+
+    .symbol-item {
+      display: flex;
+      align-items: center;
+      padding: 10px 12px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(55, 65, 81, 0.8);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      gap: 10px;
+    }
+
+    .symbol-item:hover {
+      border-color: var(--color-teal-400);
+      background: rgba(50, 184, 198, 0.1);
+    }
+
+    .symbol-item.selected {
+      border-color: var(--color-teal-400);
+      background: rgba(50, 184, 198, 0.15);
+      box-shadow: 0 0 12px rgba(50, 184, 198, 0.3);
+    }
+
+    .symbol-checkbox {
+      width: 18px; height: 18px; border-radius: 4px;
+      border: 2px solid rgba(148, 163, 184, 0.5);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .symbol-item.selected .symbol-checkbox {
+      background: var(--color-teal-400);
+      border-color: var(--color-teal-400);
+    }
+
+    .symbol-item.selected .symbol-checkbox::after {
+      content: "\2713"; color: #0b1120; font-weight: 600; font-size: 12px;
+    }
+
+    .symbol-name { font-weight: 500; font-size: 13px; flex: 1; }
+    .symbol-status { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: rgba(34, 197, 94, 0.2); color: var(--color-green-500); }
+
+    .signals-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+
+    .signal-card {
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(55, 65, 81, 0.8);
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+
+    .signal-card:hover { border-color: var(--color-teal-400); background: rgba(50, 184, 198, 0.05); }
+
+    .signal-header {
+      grid-column: 1 / 3;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .signal-symbol { font-weight: 600; color: var(--color-gray-200); font-size: 13px; }
+    .signal-time { font-size: 11px; color: var(--color-gray-300); }
+    .signal-side-long { color: var(--color-green-500); font-weight: 600; }
+    .signal-side-short { color: var(--color-orange-400); font-weight: 600; }
+
+    .signal-stat { display: flex; justify-content: space-between; font-size: 11px; }
+    .signal-label { color: var(--color-gray-300); }
+    .signal-value { color: var(--color-gray-200); font-weight: 500; }
+
+    .quality-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .quality-excellent { background: rgba(34, 197, 94, 0.3); color: var(--color-green-500); }
+    .quality-good { background: rgba(34, 197, 94, 0.2); color: #a3e635; }
+    .quality-moderate { background: rgba(250, 204, 21, 0.2); color: var(--color-yellow-400); }
+
+    .debug-panel {
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(100, 150, 100, 0.3);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: 'Courier New', 'Consolas', monospace;
+      font-size: 11px;
+      color: #22c55e;
+      max-height: 300px;
+      overflow-y: auto;
+      line-height: 1.5;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+
+    .debug-line { margin: 2px 0; font-size: 11px; }
+    .debug-time { color: #60a5fa; }
+    .debug-model { color: #a78bfa; }
+    .debug-info { color: #22c55e; }
+    .debug-error { color: #ef4444; }
+
+    footer {
+      grid-column: 1 / 4;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 20px;
+      font-size: 11px;
+      color: var(--color-gray-300);
+      border-top: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    @media (max-width: 1200px) {
+      .layout-main { grid-template-columns: 1fr; }
+      .app-shell { grid-template-columns: 1fr; }
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); }
+    ::-webkit-scrollbar-thumb { background: rgba(100, 150, 100, 0.5); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(100, 150, 100, 0.8); }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header>
+      <div class="header-title">
+        <h1>BB Bounce ML V2 - 實時檢測器</h1>
+      </div>
+      <div class="header-controls">
+        <button class="btn btn-secondary" id="toggle-pause">暫停</button>
+        <button class="btn btn-primary" id="force-refresh">立即掃描</button>
+      </div>
+    </header>
+
+    <div class="control-section">
+      <div class="control-group">
+        <label class="control-label">時間框架</label>
+        <select id="timeframe-select">
+          <option value="15m">15 分鐘</option>
+          <option value="1h">1 小時</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label class="control-label">檢測模式</label>
+        <select id="detection-mode">
+          <option value="all">所有信號</option>
+          <option value="bb-only">僅 BB 通道接觸</option>
+          <option value="high-confidence">高信心度 (>75%)</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <div class="checkbox-row">
+          <input type="checkbox" id="show-only-active" checked>
+          <label class="control-label" for="show-only-active">僅顯示有信號</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="show-debug" checked>
+          <label class="control-label" for="show-debug">顯示調試信息</label>
+        </div>
+      </div>
+    </div>
+
+    <main class="layout-main">
+      <section class="panel">
+        <h3 class="panel-title">選擇幣種 <span id="selected-count">(0)</span></h3>
+        <div class="symbol-list" id="symbol-list">
+          <div style="color: var(--color-gray-300); padding: 20px; text-align: center;">等待連接...</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3 class="panel-title">實時信號</h3>
+        <div class="signals-grid" id="signals-grid">
+          <div style="color: var(--color-gray-300); text-align: center; padding: 20px;">無信號</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3 class="panel-title">模型調試信息</h3>
+        <div class="debug-panel" id="debug-panel">
+          <div class="debug-line" style="color: #22c55e;">正在初始化...</div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>BB Bounce ML Realtime Detector V2 | 企業級部署版本</span>
+      <span>運行狀態: <span id="status" style="color: #fbbf24;">初始化中</span></span>
+    </footer>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script>
+    const getSocketURL = () => {
+      const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
+      const host = window.location.hostname;
+      const port = window.location.port ? ':' + window.location.port : '';
+      return `${protocol}://${host}${port}`;
+    };
+
+    const socket = io(getSocketURL(), {
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: Infinity,
+      transports: ['websocket', 'polling']
+    });
+
+    const debugLines = [];
+    const maxDebugLines = 50;
+
+    let paused = false;
+    let selectedSymbols = new Set();
+    let allSymbols = [];
+    let latestSignals = [];
+    let currentTimeframe = '15m';
+    let detectionMode = 'all';
+    let showOnlyActive = true;
+    let showDebug = true;
+
+    const symbolListEl = document.getElementById('symbol-list');
+    const signalsGridEl = document.getElementById('signals-grid');
+    const debugPanelEl = document.getElementById('debug-panel');
+    const selectedCountEl = document.getElementById('selected-count');
+    const statusEl = document.getElementById('status');
+
+    function addDebugLine(message) {
+      const timestamp = new Date().toLocaleTimeString('zh-TW');
+      const logLine = `[${timestamp}] ${message}`;
+      debugLines.unshift(logLine);
+      if (debugLines.length > maxDebugLines) debugLines.pop();
+      renderDebugPanel();
+    }
+
+    function renderDebugPanel() {
+      if (!showDebug) {
+        debugPanelEl.innerHTML = '<div class="debug-line">調試信息已隱藏</div>';
+        return;
+      }
+      const html = debugLines.map(line => {
+        const parts = line.match(/\[(.*?)\]\s(.*)/);
+        if (parts && parts.length === 3) {
+          return `<div class="debug-line"><span class="debug-time">[${parts[1]}]</span> ${parts[2]}</div>`;
+        }
+        return `<div class="debug-line">${line}</div>`;
+      }).join('');
+      debugPanelEl.innerHTML = html || '<div class="debug-line">無調試信息</div>';
+    }
+
+    function renderSymbols() {
+      symbolListEl.innerHTML = '';
+      for (const symbol of allSymbols.sort()) {
+        const isSelected = selectedSymbols.has(symbol);
+        const el = document.createElement('div');
+        el.className = `symbol-item ${isSelected ? 'selected' : ''}`;
+        el.innerHTML = `
+          <div class="symbol-checkbox"></div>
+          <div class="symbol-name">${symbol}</div>
+          <div class="symbol-status">15m</div>
+        `;
+        el.addEventListener('click', () => {
+          if (isSelected) {
+            selectedSymbols.delete(symbol);
+            socket.emit('select_symbol', { symbol, selected: false });
+          } else {
+            selectedSymbols.add(symbol);
+            socket.emit('select_symbol', { symbol, selected: true });
+          }
+          renderSymbols();
+          renderSignals();
+          updateSelectedCount();
+          addDebugLine(`幣種切換: ${symbol} (${isSelected ? '取消選擇' : '已選擇'})`);
+        });
+        symbolListEl.appendChild(el);
+      }
+    }
+
+    function updateSelectedCount() {
+      selectedCountEl.textContent = `(${selectedSymbols.size})`;
+    }
+
+    function filterSignals() {
+      let filtered = latestSignals;
+
+      if (selectedSymbols.size > 0) {
+        filtered = filtered.filter(s => selectedSymbols.has(s.symbol));
+      }
+
+      if (detectionMode === 'high-confidence') {
+        filtered = filtered.filter(s => (s.validity_prob || 0) >= 0.75);
+      }
+
+      return filtered.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    }
+
+    function renderSignals() {
+      const signals = filterSignals();
+      signalsGridEl.innerHTML = '';
+
+      if (signals.length === 0) {
+        signalsGridEl.innerHTML = '<div style="color: var(--color-gray-300); text-align: center; padding: 20px;">無信號</div>';
+        return;
+      }
+
+      for (const signal of signals.slice(0, 20)) {
+        const prob = signal.validity_prob || 0;
+        const qualityClass = prob >= 0.75 ? 'quality-excellent' : prob >= 0.65 ? 'quality-good' : 'quality-moderate';
+        const sideClass = signal.side === 'long' ? 'signal-side-long' : 'signal-side-short';
+        const sideText = signal.side === 'long' ? '多頭 ↑' : '空頭 ↓';
+
+        const card = document.createElement('div');
+        card.className = 'signal-card';
+        card.innerHTML = `
+          <div class="signal-header">
+            <div>
+              <div class="signal-symbol">${signal.symbol}</div>
+              <div class="signal-time">${new Date(signal.timestamp).toLocaleTimeString('zh-TW')}</div>
+            </div>
+            <div class="${sideClass}" style="font-size: 14px;">${sideText}</div>
+          </div>
+          <div class="signal-stat">
+            <span class="signal-label">位置:</span>
+            <span class="signal-value">${signal.bb_position_label || 'Middle'}</span>
+          </div>
+          <div class="signal-stat">
+            <span class="signal-label">有效性:</span>
+            <span class="signal-value">${Math.round(prob * 100)}%</span>
+          </div>
+          <div class="signal-stat">
+            <span class="signal-label">品質:</span>
+            <span class="quality-badge ${qualityClass}">${prob >= 0.75 ? 'EXCELLENT' : prob >= 0.65 ? 'GOOD' : 'MODERATE'}</span>
+          </div>
+          <div class="signal-stat">
+            <span class="signal-label">RSI:</span>
+            <span class="signal-value">${(signal.rsi || 0).toFixed(1)}</span>
+          </div>
+          <div class="signal-stat">
+            <span class="signal-label">ADX:</span>
+            <span class="signal-value">${(signal.adx || 0).toFixed(1)}</span>
+          </div>
+        `;
+        signalsGridEl.appendChild(card);
+      }
+    }
+
+    document.getElementById('timeframe-select').addEventListener('change', (e) => {
+      currentTimeframe = e.target.value;
+      addDebugLine(`時間框架變更: ${e.target.value}`);
+      socket.emit('set_timeframe', { timeframe: currentTimeframe });
+    });
+
+    document.getElementById('detection-mode').addEventListener('change', (e) => {
+      detectionMode = e.target.value;
+      addDebugLine(`檢測模式: ${e.target.value}`);
+      renderSignals();
+    });
+
+    document.getElementById('show-only-active').addEventListener('change', (e) => {
+      showOnlyActive = e.target.checked;
+      addDebugLine(`活躍幣種過濾: ${e.target.checked ? '開啟' : '關閉'}`);
+      renderSignals();
+    });
+
+    document.getElementById('show-debug').addEventListener('change', (e) => {
+      showDebug = e.target.checked;
+      renderDebugPanel();
+    });
+
+    document.getElementById('toggle-pause').addEventListener('click', () => {
+      paused = !paused;
+      const btn = document.getElementById('toggle-pause');
+      btn.textContent = paused ? '恢復' : '暫停';
+      addDebugLine(`實時更新: ${paused ? '已暫停' : '已恢復'}`);
+    });
+
+    document.getElementById('force-refresh').addEventListener('click', () => {
+      socket.emit('force_refresh', {});
+      addDebugLine('強制刷新所有幣種');
+    });
+
+    socket.on('connect', () => {
+      statusEl.textContent = '已連接';
+      statusEl.style.color = '#22c55e';
+      addDebugLine('WebSocket 連接成功');
+      socket.emit('request_symbol_list');
+    });
+
+    socket.on('connect_error', (error) => {
+      statusEl.textContent = '連接錯誤';
+      statusEl.style.color = '#ef4444';
+      addDebugLine(`連接錯誤: ${error.message || error}`);
+    });
+
+    socket.on('disconnect', () => {
+      statusEl.textContent = '已斷開';
+      statusEl.style.color = '#ef4444';
+      addDebugLine('WebSocket 連接已斷開');
+    });
+
+    socket.on('symbol_list_response', (data) => {
+      allSymbols = data.symbols || [];
+      addDebugLine(`已加載 ${allSymbols.length} 個幣種`);
+      addDebugLine(`幣種列表: ${allSymbols.join(', ')}`);
+      renderSymbols();
+    });
+
+    socket.on('realtime_signal', (payload) => {
+      if (paused) return;
+
+      const signal = {
+        symbol: payload.symbol || 'UNKNOWN',
+        timeframe: payload.timeframe || '15m',
+        side: (payload.side || 'long').toLowerCase(),
+        validity_prob: payload.validity_prob || 0,
+        bb_position_label: payload.bb_position_label || 'Middle',
+        rsi: payload.rsi,
+        adx: payload.adx,
+        vol_ratio: payload.vol_ratio,
+        timestamp: payload.timestamp || Date.now(),
+      };
+
+      latestSignals.unshift(signal);
+      latestSignals = latestSignals.slice(0, 100);
+
+      renderSignals();
+      addDebugLine(`新信號: ${signal.symbol} ${signal.side.toUpperCase()} @ ${Math.round(signal.validity_prob * 100)}%`);
+    });
+
+    socket.on('error', (error) => {
+      addDebugLine(`系統錯誤: ${error}`);
+    });
+
+    addDebugLine('應用啟動成功');
+    addDebugLine('連接信息: ' + getSocketURL());
+  </script>
+</body>
+</html>
