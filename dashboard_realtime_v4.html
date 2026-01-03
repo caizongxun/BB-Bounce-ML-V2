@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BB 反彈實時監控系統 V4</title>
+    <title>BB 反彈實時監控系統 V4 + 波動性 + 接近提示</title>
     <style>
         * {
             margin: 0;
@@ -265,6 +265,89 @@
             color: #ffc107;
         }
 
+        /* 接近提示段 */
+        .approaching-alert {
+            background: rgba(255, 87, 34, 0.15);
+            border: 2px solid #ff5722;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            animation: pulse-alert 2s infinite;
+        }
+
+        .approaching-alert.danger {
+            background: rgba(255, 87, 34, 0.25);
+            border-color: #ff5722;
+        }
+
+        .approaching-alert.warning {
+            background: rgba(255, 152, 0, 0.15);
+            border-color: #ff9800;
+        }
+
+        .approaching-alert.caution {
+            background: rgba(255, 193, 7, 0.15);
+            border-color: #ffc107;
+        }
+
+        @keyframes pulse-alert {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 87, 34, 0.7); }
+            50% { box-shadow: 0 0 0 10px rgba(255, 87, 34, 0); }
+        }
+
+        .approaching-alert.warning {
+            animation: pulse-alert-warning 2s infinite;
+        }
+
+        @keyframes pulse-alert-warning {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7); }
+            50% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0); }
+        }
+
+        .alert-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #ff5722;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .alert-title.warning {
+            color: #ff9800;
+        }
+
+        .alert-title.caution {
+            color: #ffc107;
+        }
+
+        .alert-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+        }
+
+        .alert-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .alert-label {
+            font-size: 10px;
+            color: #ffffff;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .alert-value {
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+            color: #ffeb3b;
+        }
+
         /* 波動性颜色*/
         .detail-value.vol-very-high {
             color: #ff5252;
@@ -421,7 +504,7 @@
             color: #e0e0e0;
         }
 
-        /* 更新時間戳 */
+        /* 更新時間戴 */
         .update-timestamp {
             font-size: 11px;
             color: #80d0d8;
@@ -499,7 +582,7 @@
     <!-- 頻部 -->
     <div class="header">
         <div class="header-content">
-            <div class="logo">BB 反彈實時監控系統 V4 + 波動性預測</div>
+            <div class="logo">BB 反彈實時監控系統 V4 + 波動 + 接近提示</div>
             <div class="status-info">
                 <div class="status-item">
                     <div class="status-dot active"></div>
@@ -650,6 +733,7 @@
 
         function renderDetailPanel(data, symbol, timeframe) {
             const bb = data.bb_touch || {};
+            const approach = bb.approach || {};
             const touched = bb.touched || false;
             const touchType = bb.touch_type || 'none';
             const confidence = (bb.confidence * 100).toFixed(2);
@@ -659,7 +743,7 @@
             let statusText = '未觸及';
             if (touched && touchType === 'lower') {
                 statusClass = 'positive';
-                statusText = '觸及下軌 ↓';
+                statusText = '觸厬下軌 ↓';
             } else if (touched && touchType === 'upper') {
                 statusClass = 'negative';
                 statusText = '觸厬上軌 ↑';
@@ -670,6 +754,52 @@
             if (volLevel === 'very_high') volClass = 'vol-very-high';
             else if (volLevel === 'high') volClass = 'vol-high';
             else if (volLevel === 'moderate') volClass = 'vol-moderate';
+
+            // 接近提示 HTML
+            let approachingHTML = '';
+            if (approach.approaching || approach.direction) {
+                const warningLevel = approach.warning_level || 'none';
+                const distancePercent = (approach.distance_percent || 0).toFixed(2);
+                const direction = approach.direction === 'upper' ? '上軌 ↑' : '下軌 ↓';
+                
+                let alertIcon = '!!';
+                let alertTitle = '';
+                
+                if (warningLevel === 'danger') {
+                    alertIcon = '⚠️';
+                    alertTitle = `細被警告: 接近 ${direction} (${distancePercent}%)`;
+                } else if (warningLevel === 'warning') {
+                    alertIcon = '⁈️';
+                    alertTitle = `接近提示: 即將觸厬 ${direction} (${distancePercent}%)`;
+                } else if (warningLevel === 'caution') {
+                    alertIcon = 'i';
+                    alertTitle = `輕微提示: 接近 ${direction} (${distancePercent}%)`;
+                }
+
+                const alertClass = `approaching-alert ${warningLevel}`;
+                
+                approachingHTML = `
+                    <div class="${alertClass}">
+                        <div class="alert-title ${warningLevel === 'caution' ? 'caution' : (warningLevel === 'warning' ? 'warning' : 'danger')}">
+                            ${alertIcon} ${alertTitle}
+                        </div>
+                        <div class="alert-content">
+                            <div class="alert-item">
+                                <div class="alert-label">接近方向</div>
+                                <div class="alert-value">${direction}</div>
+                            </div>
+                            <div class="alert-item">
+                                <div class="alert-label">距離率</div>
+                                <div class="alert-value">${distancePercent}%</div>
+                            </div>
+                            <div class="alert-item">
+                                <div class="alert-label">警告級別</div>
+                                <div class="alert-value">${warningLevel.toUpperCase()}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
 
             return `
                 <div class="detail-grid">
@@ -726,6 +856,7 @@
                         </div>
                     ` : ''}
                 </div>
+                ${approachingHTML}
             `;
         }
 
@@ -758,6 +889,7 @@
 
         function renderSymbolCard(data, symbol) {
             const bb = data.bb_touch || {};
+            const approach = bb.approach || {};
             const touched = bb.touched || false;
             const touchType = bb.touch_type || 'none';
             const vol = data.volatility || {};
@@ -773,10 +905,13 @@
                 cardClass = 'touched-upper';
                 statusClass = 'touched-upper';
                 statusText = '上軌 ↑';
-            } else if (bb.bb_upper && Math.abs(bb.current_high - bb.bb_upper) / bb.bb_upper < 0.01) {
+            } else if (approach.direction) {
+                // 接近一軌
                 cardClass = 'approaching';
                 statusClass = 'approaching';
-                statusText = '接近上軌';
+                const dir = approach.direction === 'upper' ? '↑' : '↓';
+                const dist = (approach.distance_percent || 0).toFixed(1);
+                statusText = `接近${dir} ${dist}%`;
             }
 
             const now = new Date();
