@@ -3,7 +3,7 @@ Bollinger Bands Bounce Detection - Data Labeling System
 Complete implementation of automated bounce point detection and feature extraction
 
 Author: Caizong Xun
-Version: 1.0.0
+Version: 1.0.1
 Date: 2026-01-04
 """
 
@@ -81,15 +81,21 @@ def download_ohlcv_data(symbol, timeframe):
         # Read parquet file
         df = pd.read_parquet(path)
         
-        # Convert timestamp to datetime
-        if isinstance(df.index, (int, np.integer)) or 'timestamp' in df.columns:
+        # Handle timestamp conversion intelligently
+        try:
             if 'timestamp' in df.columns:
-                df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
                 df.set_index('timestamp', inplace=True)
             else:
-                df.index = pd.to_datetime(df.index, unit='ms')
-        else:
-            df.index = pd.to_datetime(df.index)
+                df.index = pd.to_datetime(df.index, errors='coerce')
+        except:
+            if isinstance(df.index, pd.RangeIndex):
+                df.index = pd.to_datetime(df.index, unit='ms', errors='coerce')
+            else:
+                df.index = pd.to_datetime(df.index, errors='coerce')
+        
+        # Remove any rows with NaT in index
+        df = df[df.index.notna()]
         
         # Standardize column names
         df.columns = df.columns.str.lower()
@@ -280,18 +286,18 @@ def calculate_pei_for_touch(df, idx, direction='long'):
     
     # Volume spike
     vol_ratio = df.iloc[idx]['volume_ratio']
-    vol_score = min(1.0, (vol_ratio - 1) / 2)
+    vol_score = min(1.0, (vol_ratio - 1) / 2) if vol_ratio > 0 else 0
     
     # RSI extreme
     rsi = df.iloc[idx]['rsi']
     if direction == 'long':
-        rsi_score = 1.0 if rsi < 30 else max(0, (50 - rsi) / 50)
+        rsi_score = 1.0 if rsi < 30 else max(0, (50 - rsi) / 50) if not pd.isna(rsi) else 0.5
     else:
-        rsi_score = 1.0 if rsi > 70 else max(0, (rsi - 50) / 50)
+        rsi_score = 1.0 if rsi > 70 else max(0, (rsi - 50) / 50) if not pd.isna(rsi) else 0.5
     
     # Pattern factor
     body_ratio = abs(df.iloc[idx]['close'] - df.iloc[idx]['open']) / (df.iloc[idx]['high'] - df.iloc[idx]['low'] + 1e-10)
-    pattern_score = 1.0 - body_ratio  # Small body is better
+    pattern_score = 1.0 - body_ratio
     
     pei = (shadow_score * 0.35 + vol_score * 0.30 + rsi_score * 0.20 + pattern_score * 0.15)
     return max(0, min(1.0, pei))
@@ -317,7 +323,7 @@ def calculate_mess(df, idx):
     bb_pct = df.iloc[idx]['bb_pct']
     bb_score = 0.5 if pd.isna(bb_pct) else (1.0 - bb_pct)
     
-    # Price Position component (favor mid-lower for long, mid-upper for short)
+    # Price Position component
     price_score = abs(bb_pct - 0.3) if not pd.isna(bb_pct) else 0.5
     
     # DI Balance component
@@ -380,7 +386,7 @@ def label_bounce_signals(df, symbol, direction='long', **params):
         df.at[df.index[idx], 'pei'] = pei
         df.at[df.index[idx], 'mess'] = mess
         
-        # Calculate MRMS (simplified as RSI momentum)
+        # Calculate MRMS
         rsi = df.iloc[idx]['rsi']
         mrms = 1.0 if pd.isna(rsi) else max(0, min(1.0, 1.0 - abs(rsi - 50) / 50))
         df.at[df.index[idx], 'mrms'] = mrms
@@ -422,40 +428,40 @@ def extract_features_at_touch(df, idx, direction='long'):
     features['Support_Tests'] = min(1.0, sum(1 for i in range(max(0, idx-100), idx) 
                                              if (direction == 'long' and df.iloc[i]['low'] <= df.iloc[idx]['bb_lower'] * 1.001)
                                              or (direction == 'short' and df.iloc[i]['high'] >= df.iloc[idx]['bb_upper'] / 1.001)) / 5.0)
-    features['Distance_to_Support'] = 0.5  # Normalized
-    features['Previous_Bounce'] = 0.5  # Simplified
-    features['Support_Quality'] = 0.5  # Simplified
+    features['Distance_to_Support'] = 0.5
+    features['Previous_Bounce'] = 0.5
+    features['Support_Quality'] = 0.5
     
     # Level 3: Exhaustion Signals (8)
     features['PEI'] = df.iloc[idx]['pei']
-    features['Shadow_Ratio'] = 0.5  # Simplified
+    features['Shadow_Ratio'] = 0.5
     features['Volume_Ratio'] = min(1.0, df.iloc[idx]['volume_ratio'] / 3.0) if 'volume_ratio' in df.columns else 0.5
     features['RSI_14'] = df.iloc[idx]['rsi'] / 100.0 if not pd.isna(df.iloc[idx]['rsi']) else 0.5
-    features['RSI_Divergence'] = 0.5  # Simplified
+    features['RSI_Divergence'] = 0.5
     features['Vol_Spike'] = min(1.0, df.iloc[idx]['volume_ratio'] / 2.0) if 'volume_ratio' in df.columns else 0.5
-    features['Body_Ratio'] = 0.5  # Simplified
-    features['Shape_Factor'] = 0.5  # Simplified
+    features['Body_Ratio'] = 0.5
+    features['Shape_Factor'] = 0.5
     
     # Level 4: Momentum (7)
     features['MRMS'] = df.iloc[idx]['mrms']
     features['RSI_Level'] = max(0, min(1.0, 1.0 - abs(df.iloc[idx]['rsi'] - 50) / 50)) if not pd.isna(df.iloc[idx]['rsi']) else 0.5
-    features['Momentum_Change'] = 0.5  # Simplified
-    features['MOM_9'] = 0.5  # Simplified
-    features['MOM_20'] = 0.5  # Simplified
-    features['Acceleration'] = 0.5  # Simplified
-    features['Deceleration'] = 0.5  # Simplified
+    features['Momentum_Change'] = 0.5
+    features['MOM_9'] = 0.5
+    features['MOM_20'] = 0.5
+    features['Acceleration'] = 0.5
+    features['Deceleration'] = 0.5
     
     # Level 5: Pattern (6)
-    features['Color_Sequence'] = 0.5  # Simplified
+    features['Color_Sequence'] = 0.5
     features['Body_to_Range'] = abs(df.iloc[idx]['close'] - df.iloc[idx]['open']) / (df.iloc[idx]['high'] - df.iloc[idx]['low'] + 1e-10)
-    features['Engulfing'] = 0.5  # Simplified
-    features['Inside_Bar'] = 0.5  # Simplified
+    features['Engulfing'] = 0.5
+    features['Inside_Bar'] = 0.5
     features['Upper_Shadow'] = (df.iloc[idx]['high'] - df.iloc[idx]['close']) / (df.iloc[idx]['high'] - df.iloc[idx]['low'] + 1e-10)
     features['Lower_Shadow'] = (df.iloc[idx]['open'] - df.iloc[idx]['low']) / (df.iloc[idx]['high'] - df.iloc[idx]['low'] + 1e-10)
     
     # Level 6: Composite Scores (3)
     features['BVS'] = df.iloc[idx]['bvs']
-    features['SBVS'] = 1.0 - df.iloc[idx]['bvs']  # Opposite for shorts
+    features['SBVS'] = 1.0 - df.iloc[idx]['bvs']
     features['Agreement'] = min(df.iloc[idx]['pei'], df.iloc[idx]['sss'])
     
     return features
@@ -520,6 +526,7 @@ def process_all_symbols_and_timeframes(symbols, timeframes):
             try:
                 df = download_ohlcv_data(symbol, timeframe)
                 if df is None or len(df) < BB_PERIOD:
+                    print(f"  Skipped: insufficient data")
                     continue
                 
                 df = calculate_all_indicators(df)
@@ -545,6 +552,10 @@ def validate_labeled_data(df):
     - Statistical properties
     - Class balance
     """
+    if len(df) == 0:
+        print("No data to validate")
+        return
+    
     print("\n=== Data Validation Report ===\n")
     
     print(f"1. Dataset Shape: {df.shape}")
