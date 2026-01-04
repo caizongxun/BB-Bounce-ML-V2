@@ -1,65 +1,17 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
 # Data files
-*.parquet
+data/
 *.csv
 *.xlsx
-labeled_data/
-training_data*
-export_*
+*.xls
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*.sublime-project
-*.sublime-workspace
+# Output files
+outputs/
+logs/
+*.log
 
-# System
-.DS_Store
-Thumbs.db
-.env
-.env.local
-
-# Virtual environments
-venv/
-env/
-ENV/
-env.bak/
-venv.bak/
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Documentation
-.sphinx/
-_build/
-
-# Temporary
-*.tmp
-*.bak
-*.swp
-*~
+# Model files
+models/
+*.pkl
+*.h5
+*.pt
+*.pth
