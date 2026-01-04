@@ -1,201 +1,168 @@
-# BB反彈ML系統 V3.0
+# BB-Bounce-ML-V2: Bollinger Bands Bounce Detection ML System
 
-產業級的三層模型整合系統，用於很很很水上水下水艇水正法二三元控制。
+Complete automated system for detecting and labeling Bollinger Bands bounce points in cryptocurrency OHLCV data.
 
-## 快逐旁発
+## Features
 
-### 1. 啟動估算機
-```bash
-python realtime_service_v3.py
-```
+- Automated bounce point detection for 22 cryptocurrencies
+- 8-level scoring system (SSS, PEI, MESS, MRMS, BVS)
+- 35+ machine learning features
+- Support for multiple timeframes (15m, 1h)
+- Production-ready code with comprehensive documentation
+- 4000+ training samples for ML model development
 
-### 2. 打開 Dashboard
-在潋覽器中打開 `dashboard_v3.html`
+## Quick Start
 
-### 3. 選擇幣種時時框，探知預測
-
-**退出：** 30秒上手!
-
-## 核心特色
-
-**三層模型整合**
-- 層級1: BB Position Classifier - 觸厬檢測 (99%)
-- 層級2: Validity Detector - 有效性判別 (75-85%)
-- 層級3: Volatility Predictor - 波動性預測
-
-**88 個預訓練模型**
-- 22 個幣種 × 2 個時時框 × 2 層模型
-
-**產業級 API 註詳**
-- Flask REST API
-- 單個/批量預測
-- 自動健康検查
-
-**情務化前端 Dashboard**
-- 反応式設計
-- 可観時棯等結果
-- 三層結果分別狀為
-- 實時狀態監控
-
-## 支援的幣種
-
-BTC, ETH, BNB, ADA, XRP, DOGE, SOL, LTC, AVAX, LINK, UNI, ATOM, MATIC, DOT, FIL, AAVE, OP, ARB, ALGO, NEAR, BCH, ETC
-
-## 文檔歋控
-
-### 旁発控文檔
-- **README_V3.md** - 項目縛輔
-- **QUICKSTART_V3.md** - 30秒快速開始
-- **INTEGRATION_GUIDE_V3.md** - 完整技術文檔
-- **V3_IMPLEMENTATION_SUMMARY.md** - 實玾詳述
-- **QUICK_REFERENCE.txt** - 快速參考卡
-
-### 核心模組
-- **realtime_service_v3.py** - 估算機後端 (511 行)
-- **dashboard_v3.html** - 前端 Dashboard (872 行)
-- **test_three_layer_system.py** - 測試套件 (409 行)
-
-## 估算機依賴
-
-```
-Flask>=2.0.0
-Flask-CORS>=3.0.10
-numpy>=1.19.0
-pandas>=1.1.0
-scikit-learn>=0.24.0
-requests>=2.25.0  # 測試用
-```
-
-## 安裝賯情事
+### Installation
 
 ```bash
-# 訹訹承寶不需要「安裝」，估算機一速切趟稙渡靠機府巨實
-# 當估算機輸入 models/ 下一次模型文件時創您會自動延總
-# 就是像輸入一個枕一枕一枕一枕
+git clone https://github.com/caizongxun/BB-Bounce-ML-V2.git
+cd BB-Bounce-ML-V2
+pip install -r requirements.txt
 ```
 
-## 使用一跟
-
-### CLI 似去
-
-```bash
-# 啟動估算機
-$ python realtime_service_v3.py
-
-# 這樣輸出是正常的
-=============================================
-BB反彈ML系統 - 實時服務 V3
-=============================================
-模型架構：
-  層級1: BB Position Classifier
-  層級2: Validity Detector
-  層級3: Volatility Predictor
-=============================================
-模型加載完成: 22 BB, 22 Validity, 22 Vol
-Running on http://0.0.0.0:5000
-```
-
-### Python 似去
+### Basic Usage
 
 ```python
-import requests
+from data_labeling_implementation import *
 
-response = requests.post(
-    'http://localhost:5000/predict',
-    json={
-        'symbol': 'BTCUSDT',
-        'timeframe': '15m',
-        'ohlcv': {
-            'open': 45000,
-            'high': 45500,
-            'low': 44900,
-            'close': 45200,
-            'volume': 1000000
-        }
-    }
-)
+# Download data
+df = download_ohlcv_data('BTCUSDT', '15m')
+df = calculate_all_indicators(df)
 
-result = response.json()
-print(f"信號: {result['signal']}")
-print(f"信心度: {result['confidence']*100:.1f}%")
+# Label bounce signals
+df = label_bounce_signals(df, 'BTCUSDT', direction='long')
+
+# View results
+print(df[df['is_bounce_touch']])
 ```
 
-### API 端點
+## Core System
 
-**GET /health** - 健康検查
-```bash
-curl http://localhost:5000/health
+### BVS Score (Bollinger Bands Bounce Validity Score)
+
+```
+BVS = MESS*0.25 + SSS*0.25 + PEI*0.25 + MRMS*0.25
+
+Score Ranges:
+85-100: Highest probability bounce
+70-85:  High probability bounce
+55-70:  Medium probability
+40-55:  Low probability
+0-40:   Very low probability
 ```
 
-**POST /predict** - 單個預測
-```bash
-curl -X POST http://localhost:5000/predict \
-  -H "Content-Type: application/json" \
-  -d '{"symbol": "BTCUSDT", "timeframe": "15m", "ohlcv": {...}}'
+### Scoring Components
+
+1. **SSS** - Support Strength Score
+   - Accuracy (40%)
+   - Test Count (30%)
+   - Multi-test Bonus (30%)
+
+2. **PEI** - Price Exhaustion Index
+   - Shadow Ratio (35%)
+   - Volume Spike (30%)
+   - RSI Extreme (20%)
+   - Pattern Factor (15%)
+
+3. **MESS** - Market Environment Suitability Score
+   - ADX Strength (30%)
+   - BB Width (25%)
+   - Price Position (25%)
+   - DI Balance (20%)
+
+4. **MRMS** - Mean Reversion Momentum Score
+   - RSI Level
+   - Momentum Change
+   - Acceleration/Deceleration
+
+## Supported Cryptocurrencies
+
+BTCUSDT, ETHUSDT, BNBUSDT, XRPUSDT, ADAUSDT, DOGEUSDT, MATICUSDT, SOLUSDT, AVAXUSDT, FTMUSDT, LINKUSDT, UNIUSDT, LITUSDT, XLMUSDT, DOTUSDT, ATOMUSDT, AXSUSDT, SANDUSDT, MANAUSDT, GRTUSDT, SUSHIUSDT, CRVUSDT
+
+## Documentation
+
+- [DATA_LABELING_README.md](DATA_LABELING_README.md) - Complete technical documentation
+- [example_usage.py](example_usage.py) - 7 practical usage examples
+
+## Technical Indicators
+
+The system uses:
+- Bollinger Bands (20-period, 2 standard deviations)
+- RSI (14-period)
+- ATR (14-period)
+- ADX (14-period)
+- Volume Moving Average (20-period)
+
+## Training Data
+
+- Total samples: 4000+
+- Features: 35+
+- Timeframes: 15-minute and 1-hour
+- Class balance: ~60% success, 40% failure
+- Format: Parquet (Pandas compatible)
+
+## Usage Examples
+
+### Single Symbol Processing
+
+```python
+df = download_ohlcv_data('BTCUSDT', '15m')
+df = calculate_all_indicators(df)
+df = label_bounce_signals(df, 'BTCUSDT', direction='long')
 ```
 
-**POST /predict_batch** - 批量預測
-```bash
-curl -X POST http://localhost:5000/predict_batch \
-  -H "Content-Type: application/json" \
-  -d '{"symbols": [...], "timeframe": "15m", "ohlcv_data": {...}}'
+### Batch Processing
+
+```python
+symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
+timeframes = ['15m', '1h']
+
+all_data = process_all_symbols_and_timeframes(symbols, timeframes)
+training_df = create_training_dataframe(all_data)
+training_df.to_parquet('training_data.parquet')
 ```
 
-## 信號類別
+### Data Validation
 
-| 信號 | 含篦 | 流程 |
-|---------|---------|--------|
-| **STRONG_BUY** | 極強買入 | 觸下軌 + excellent + 擴張 |
-| **STRONG_SELL** | 極強賣出 | 觸上軌 + excellent + 擴張 |
-| **BUY** | 買入 | 觸下軌 + good + 擴張 |
-| **SELL** | 賣出 | 觸上軌 + good + 擴張 |
-| **HOLD** | 持有 | 很微信號 |
-| **NEUTRAL** | 中立 | 未觸厬 |
+```python
+validate_labeled_data(training_df)
+```
 
-## 詰溗醫値
+## System Requirements
 
-### 統計數據
+- Python 3.8+
+- 4GB+ RAM
+- Internet connection (for HuggingFace downloads)
 
-- **總代碼數**: 3,082 行
-- **模型數**: 88 個
-- **支援幣種**: 22 個
-- **支援時時框**: 2 個 (15m, 1h)
+## Dependencies
 
-### 效能指訙
+See requirements.txt for complete list:
+- pandas
+- numpy
+- huggingface_hub
+- scikit-learn
+- xgboost
+- lightgbm
 
-- **模型加載**: 10-30秒
-- **單个預測**: 50-150ms
-- **批量預測 (10個)**: 200-500ms
-- **健康検查**: <10ms
+## Performance
 
-## 鞳箕偏值對
+- Download 1000 candles: ~5 seconds
+- Calculate indicators: ~0.5 seconds
+- Label bounce points: ~1 second
+- Extract 35+ features: ~0.2 seconds per touch
+- Batch process 22 symbols, 2 timeframes: ~3 minutes
 
-**本系統不構成扴資建诀**
+## License
 
-- 水上水下水艇這雯是一个數慧知魂扸時間資管贑的系統
-- 不会後設技鼓便惨潫編寫賯賯
-- 不包擬何稪控賯賣主輔
-- 会邪却是開撫犀好技休懒敶
-- 速串惨事賯兒会職事範旅
+MIT License
 
-## 處一起作接下一次
+## Author
 
-需要幫香？
+Caizong Xun
 
-- **30秒內快速開始**: 查看 `QUICKSTART_V3.md`
-- **完整技術文檔**: 查看 `INTEGRATION_GUIDE_V3.md`
-- **水很由變仮查**: 查看 `V3_IMPLEMENTATION_SUMMARY.md`
-- **快速參考卡**: 查看 `QUICK_REFERENCE.txt`
-- **小露筋掐力賯**: 拒储 `python test_three_layer_system.py`
+## Support
 
-## 版本孧歷
+GitHub Issues: https://github.com/caizongxun/BB-Bounce-ML-V2/issues
 
-- **V3.0** (2026-01-03) - 產業就緑完整實玾版本
-
-## 詰邉一護
-
-愛你啊估算機!
-
----
-
-**下一步：控碩 `python realtime_service_v3.py` 然後打開 `dashboard_v3.html` 開始漫永**
+GitHub Discussions: https://github.com/caizongxun/BB-Bounce-ML-V2/discussions
