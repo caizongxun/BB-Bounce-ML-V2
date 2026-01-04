@@ -1,9 +1,9 @@
 """
 Bollinger Bands Bounce Detection - Data Labeling System
-Complete implementation of automated bounce point detection and feature extraction
+Complete implementation with performance optimizations
 
 Author: Caizong Xun
-Version: 1.0.1
+Version: 1.0.2
 Date: 2026-01-04
 """
 
@@ -35,10 +35,11 @@ ATR_PERIOD = 14
 ADX_PERIOD = 14
 VOLUME_MA_PERIOD = 20
 
-# Bounce detection parameters
-TOUCH_THRESHOLD = 1.001  # Allow 0.1% deviation
+# Bounce detection parameters (OPTIMIZED)
+TOUCH_THRESHOLD = 1.0001  # Reduced from 1.001 (0.01% vs 0.1%)
 MIN_BARS_TO_CONFIRM = 5
 TARGET_RATIO = 1.5
+MIN_BOUNCE_QUALITY = 0.45  # Filter low-quality bounces
 
 # Scoring weights
 MESS_WEIGHT = 0.25
@@ -65,23 +66,19 @@ def download_ohlcv_data(symbol, timeframe):
         raise ValueError(f"Timeframe {timeframe} not supported")
     
     try:
-        # Map timeframe to file name
         tf_map = {'15m': 'BTC_15m.parquet' if 'BTC' in symbol else f'{symbol.replace("USDT", "")}_{timeframe}.parquet',
                  '1h': f'{symbol.replace("USDT", "")}_1h.parquet'}
         
         filename = tf_map[timeframe] if symbol.startswith('BTC') else f'{symbol.replace("USDT", "")}_{timeframe}.parquet'
         
-        # Download from HuggingFace
         path = hf_hub_download(
             repo_id="zongowo111/v2-crypto-ohlcv-data",
             filename=f"klines/{symbol}/{filename}",
             repo_type="dataset"
         )
         
-        # Read parquet file
         df = pd.read_parquet(path)
         
-        # Handle timestamp conversion intelligently
         try:
             if 'timestamp' in df.columns:
                 df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
@@ -94,10 +91,7 @@ def download_ohlcv_data(symbol, timeframe):
             else:
                 df.index = pd.to_datetime(df.index, errors='coerce')
         
-        # Remove any rows with NaT in index
         df = df[df.index.notna()]
-        
-        # Standardize column names
         df.columns = df.columns.str.lower()
         
         return df.sort_index()
@@ -174,7 +168,7 @@ def calculate_all_indicators(df):
 
 def rate_support_strength(df, idx, direction='long'):
     """
-    Calculate SSS (Support Strength Score)
+    Calculate SSS (Support Strength Score) - OPTIMIZED
     
     Formula: SSS = Accuracy(0.4) + Test_Count(0.3) + Multi_Test_Bonus(0.3)
     """
@@ -183,33 +177,25 @@ def rate_support_strength(df, idx, direction='long'):
     
     if direction == 'long':
         support = df.iloc[idx]['bb_lower']
-        touches = 0
-        accuracy = 1.0
+        look_back = min(100, idx)
+        lows = df.iloc[idx-look_back:idx]['low'].values
+        touches = np.sum(lows <= support * 1.001)
         
-        for i in range(max(0, idx-100), idx):
-            if df.iloc[i]['low'] <= support * 1.001:
-                touches += 1
-                dev = abs(df.iloc[i]['low'] - support) / support
-                accuracy = min(1.0, accuracy - dev * 0.05)
-        
+        accuracy = 1.0 - (touches * 0.02) if touches > 0 else 1.0
         test_count = min(1.0, touches / 5.0)
-        multi_test_bonus = min(0.2, (touches - 1) * 0.05) if touches > 1 else 0
+        multi_test_bonus = min(0.2, max(0, touches - 1) * 0.05)
         
         sss = accuracy * 0.4 + test_count * 0.3 + multi_test_bonus * 0.3
         
-    else:  # short
-        support = df.iloc[idx]['bb_upper']
-        touches = 0
-        accuracy = 1.0
+    else:
+        resistance = df.iloc[idx]['bb_upper']
+        look_back = min(100, idx)
+        highs = df.iloc[idx-look_back:idx]['high'].values
+        touches = np.sum(highs >= resistance * 0.999)
         
-        for i in range(max(0, idx-100), idx):
-            if df.iloc[i]['high'] >= support * 0.999:
-                touches += 1
-                dev = abs(df.iloc[i]['high'] - support) / support
-                accuracy = min(1.0, accuracy - dev * 0.05)
-        
+        accuracy = 1.0 - (touches * 0.02) if touches > 0 else 1.0
         test_count = min(1.0, touches / 5.0)
-        multi_test_bonus = min(0.2, (touches - 1) * 0.05) if touches > 1 else 0
+        multi_test_bonus = min(0.2, max(0, touches - 1) * 0.05)
         
         sss = accuracy * 0.4 + test_count * 0.3 + multi_test_bonus * 0.3
     
@@ -224,7 +210,7 @@ def detect_lower_band_touch(df, idx, tolerance=TOUCH_THRESHOLD):
         return False
     return df.iloc[idx]['low'] <= df.iloc[idx]['bb_lower'] * tolerance
 
-def detect_upper_band_touch(df, idx, tolerance=1.001):
+def detect_upper_band_touch(df, idx, tolerance=1.0001):
     """Detect if candle touches upper Bollinger Band"""
     if idx < BB_PERIOD or pd.isna(df.iloc[idx]['bb_upper']):
         return False
@@ -246,7 +232,7 @@ def is_bounce_successful(df, idx, direction='long', target_ratio=TARGET_RATIO, m
         
         return False, target, None
     
-    else:  # short
+    else:
         resistance = df.iloc[idx]['bb_upper']
         target = resistance - (df.iloc[idx]['bb_upper'] - df.iloc[idx]['bb_lower']) * target_ratio
         
@@ -272,7 +258,6 @@ def calculate_pei_for_touch(df, idx, direction='long'):
     if idx < 2:
         return 0.5
     
-    # Shadow ratio
     if direction == 'long':
         lower_shadow = df.iloc[idx]['open'] - df.iloc[idx]['low']
         candle_range = df.iloc[idx]['high'] - df.iloc[idx]['low']
@@ -284,18 +269,15 @@ def calculate_pei_for_touch(df, idx, direction='long'):
         shadow_ratio = upper_shadow / (candle_range + 1e-10)
         shadow_score = min(1.0, shadow_ratio * 2)
     
-    # Volume spike
     vol_ratio = df.iloc[idx]['volume_ratio']
     vol_score = min(1.0, (vol_ratio - 1) / 2) if vol_ratio > 0 else 0
     
-    # RSI extreme
     rsi = df.iloc[idx]['rsi']
     if direction == 'long':
         rsi_score = 1.0 if rsi < 30 else max(0, (50 - rsi) / 50) if not pd.isna(rsi) else 0.5
     else:
         rsi_score = 1.0 if rsi > 70 else max(0, (rsi - 50) / 50) if not pd.isna(rsi) else 0.5
     
-    # Pattern factor
     body_ratio = abs(df.iloc[idx]['close'] - df.iloc[idx]['open']) / (df.iloc[idx]['high'] - df.iloc[idx]['low'] + 1e-10)
     pattern_score = 1.0 - body_ratio
     
@@ -315,18 +297,14 @@ def calculate_mess(df, idx):
     if idx < ADX_PERIOD:
         return 0.5
     
-    # ADX component
     adx = df.iloc[idx]['adx']
     adx_score = min(1.0, adx / 40.0) if not pd.isna(adx) else 0.5
     
-    # BB Width component
     bb_pct = df.iloc[idx]['bb_pct']
     bb_score = 0.5 if pd.isna(bb_pct) else (1.0 - bb_pct)
     
-    # Price Position component
     price_score = abs(bb_pct - 0.3) if not pd.isna(bb_pct) else 0.5
     
-    # DI Balance component
     di_plus = df.iloc[idx]['di_plus']
     di_minus = df.iloc[idx]['di_minus']
     di_balance = 1.0 - abs(di_plus - di_minus) / (abs(di_plus) + abs(di_minus) + 1e-10)
@@ -340,7 +318,7 @@ def calculate_mess(df, idx):
 
 def label_bounce_signals(df, symbol, direction='long', **params):
     """
-    Complete labeling pipeline for bounce signals
+    Complete labeling pipeline for bounce signals - OPTIMIZED
     
     Args:
         df: DataFrame with indicators
@@ -364,44 +342,48 @@ def label_bounce_signals(df, symbol, direction='long', **params):
     df['target_price'] = np.nan
     df['bars_to_target'] = np.nan
     
-    for idx in range(max(BB_PERIOD, 20), len(df) - MIN_BARS_TO_CONFIRM):
-        # Check touch
-        if direction == 'long':
-            is_touch = detect_lower_band_touch(df, idx)
-        else:
-            is_touch = detect_upper_band_touch(df, idx)
-        
-        if not is_touch:
-            continue
-        
-        # Mark touch
-        df.at[df.index[idx], 'is_bounce_touch'] = True
-        
-        # Calculate scores
+    touch_indices = []
+    
+    if direction == 'long':
+        tolerance = TOUCH_THRESHOLD
+        touches = (df['low'] <= df['bb_lower'] * tolerance).values
+    else:
+        tolerance = 1.0001
+        touches = (df['high'] >= df['bb_upper'] / tolerance).values
+    
+    touch_indices = np.where(touches)[0]
+    touch_indices = touch_indices[(touch_indices >= BB_PERIOD) & (touch_indices < len(df) - MIN_BARS_TO_CONFIRM)]
+    
+    print(f"    Found {len(touch_indices)} potential {direction} touches")
+    
+    processed = 0
+    for idx in touch_indices:
         sss = rate_support_strength(df, idx, direction)
         pei = calculate_pei_for_touch(df, idx, direction)
         mess = calculate_mess(df, idx)
         
-        df.at[df.index[idx], 'sss'] = sss
-        df.at[df.index[idx], 'pei'] = pei
-        df.at[df.index[idx], 'mess'] = mess
-        
-        # Calculate MRMS
         rsi = df.iloc[idx]['rsi']
         mrms = 1.0 if pd.isna(rsi) else max(0, min(1.0, 1.0 - abs(rsi - 50) / 50))
-        df.at[df.index[idx], 'mrms'] = mrms
         
-        # Calculate BVS
         bvs = (mess * MESS_WEIGHT + sss * SSS_WEIGHT + pei * PEI_WEIGHT + mrms * MRMS_WEIGHT)
-        df.at[df.index[idx], 'bvs'] = bvs
         
-        # Check success
-        success, target, bars = is_bounce_successful(df, idx, direction)
-        df.at[df.index[idx], 'bounce_success'] = 1 if success else 0
-        df.at[df.index[idx], 'target_price'] = target
-        if bars is not None:
-            df.at[df.index[idx], 'bars_to_target'] = bars
+        if bvs >= MIN_BOUNCE_QUALITY:
+            df.at[df.index[idx], 'is_bounce_touch'] = True
+            df.at[df.index[idx], 'sss'] = sss
+            df.at[df.index[idx], 'pei'] = pei
+            df.at[df.index[idx], 'mess'] = mess
+            df.at[df.index[idx], 'mrms'] = mrms
+            df.at[df.index[idx], 'bvs'] = bvs
+            
+            success, target, bars = is_bounce_successful(df, idx, direction)
+            df.at[df.index[idx], 'bounce_success'] = 1 if success else 0
+            df.at[df.index[idx], 'target_price'] = target
+            if bars is not None:
+                df.at[df.index[idx], 'bars_to_target'] = bars
+            
+            processed += 1
     
+    print(f"    Processed {processed} high-quality {direction} bounces")
     return df
 
 
@@ -415,7 +397,6 @@ def extract_features_at_touch(df, idx, direction='long'):
     """
     features = {}
     
-    # Level 1: Environment Features (6)
     features['MESS'] = df.iloc[idx]['mess']
     features['ADX'] = df.iloc[idx]['adx'] / 100.0 if not pd.isna(df.iloc[idx]['adx']) else 0.5
     features['DI_Plus'] = df.iloc[idx]['di_plus'] / 100.0 if not pd.isna(df.iloc[idx]['di_plus']) else 0.5
@@ -423,7 +404,6 @@ def extract_features_at_touch(df, idx, direction='long'):
     features['BB_Width'] = (df.iloc[idx]['bb_width'] / df.iloc[idx]['close']) if df.iloc[idx]['close'] != 0 else 0.5
     features['Price_Position'] = df.iloc[idx]['bb_pct'] if not pd.isna(df.iloc[idx]['bb_pct']) else 0.5
     
-    # Level 2: Support Features (5)
     features['SSS'] = df.iloc[idx]['sss']
     features['Support_Tests'] = min(1.0, sum(1 for i in range(max(0, idx-100), idx) 
                                              if (direction == 'long' and df.iloc[i]['low'] <= df.iloc[idx]['bb_lower'] * 1.001)
@@ -432,7 +412,6 @@ def extract_features_at_touch(df, idx, direction='long'):
     features['Previous_Bounce'] = 0.5
     features['Support_Quality'] = 0.5
     
-    # Level 3: Exhaustion Signals (8)
     features['PEI'] = df.iloc[idx]['pei']
     features['Shadow_Ratio'] = 0.5
     features['Volume_Ratio'] = min(1.0, df.iloc[idx]['volume_ratio'] / 3.0) if 'volume_ratio' in df.columns else 0.5
@@ -442,7 +421,6 @@ def extract_features_at_touch(df, idx, direction='long'):
     features['Body_Ratio'] = 0.5
     features['Shape_Factor'] = 0.5
     
-    # Level 4: Momentum (7)
     features['MRMS'] = df.iloc[idx]['mrms']
     features['RSI_Level'] = max(0, min(1.0, 1.0 - abs(df.iloc[idx]['rsi'] - 50) / 50)) if not pd.isna(df.iloc[idx]['rsi']) else 0.5
     features['Momentum_Change'] = 0.5
@@ -451,7 +429,6 @@ def extract_features_at_touch(df, idx, direction='long'):
     features['Acceleration'] = 0.5
     features['Deceleration'] = 0.5
     
-    # Level 5: Pattern (6)
     features['Color_Sequence'] = 0.5
     features['Body_to_Range'] = abs(df.iloc[idx]['close'] - df.iloc[idx]['open']) / (df.iloc[idx]['high'] - df.iloc[idx]['low'] + 1e-10)
     features['Engulfing'] = 0.5
@@ -459,7 +436,6 @@ def extract_features_at_touch(df, idx, direction='long'):
     features['Upper_Shadow'] = (df.iloc[idx]['high'] - df.iloc[idx]['close']) / (df.iloc[idx]['high'] - df.iloc[idx]['low'] + 1e-10)
     features['Lower_Shadow'] = (df.iloc[idx]['open'] - df.iloc[idx]['low']) / (df.iloc[idx]['high'] - df.iloc[idx]['low'] + 1e-10)
     
-    # Level 6: Composite Scores (3)
     features['BVS'] = df.iloc[idx]['bvs']
     features['SBVS'] = 1.0 - df.iloc[idx]['bvs']
     features['Agreement'] = min(df.iloc[idx]['pei'], df.iloc[idx]['sss'])
@@ -508,7 +484,7 @@ def create_training_dataframe(all_labeled_data):
 
 def process_all_symbols_and_timeframes(symbols, timeframes):
     """
-    Complete pipeline: download, calculate, label, extract
+    Complete pipeline: download, calculate, label, extract - OPTIMIZED
     
     Args:
         symbols: List of symbols
@@ -529,12 +505,16 @@ def process_all_symbols_and_timeframes(symbols, timeframes):
                     print(f"  Skipped: insufficient data")
                     continue
                 
+                print(f"  Downloaded {len(df)} candles")
+                
                 df = calculate_all_indicators(df)
+                print(f"  Indicators calculated")
+                
                 df = label_bounce_signals(df, symbol, direction='long')
                 df = label_bounce_signals(df, symbol, direction='short')
                 
                 all_data.append(df)
-                print(f"  Successfully processed: {len(df[df['is_bounce_touch']])} bounce points")
+                print(f"  Complete: {len(df[df['is_bounce_touch']])} bounce points")
             
             except Exception as e:
                 print(f"  Error: {str(e)}")
